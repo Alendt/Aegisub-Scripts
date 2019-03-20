@@ -272,9 +272,6 @@ perspective = (line, tr_org, tr_center, tr_ratio) ->
 		if zero[1] != nil
 			p, ratio = zero[1], zero[2]
 			table.insert(rots, {ratio, p, a})
-	
-	if count_e(rots) == 0
-		aegisub.log("No proper perspective found.")
 
 	if tr_org
 		if line.text\match("org%b()")
@@ -283,6 +280,7 @@ perspective = (line, tr_org, tr_center, tr_ratio) ->
 			export pos_org = line.text\match("pos%b()")
 		else
 			aegisub.log("\\org or \\pos missing")
+			aegisub.cancel!
 
 		px, py = pos_org\match("([-%d.]+).([-%d.]+)")
 		target_org = Point(px, py)
@@ -293,6 +291,10 @@ perspective = (line, tr_org, tr_center, tr_ratio) ->
 			aegisub.log(tf_tags)
 		else
 			return "\\org("..target_org.x..","..target_org.y..")"..tf_tags
+			
+	if count_e(rots) == 0
+		aegisub.log("No proper perspective found.")
+		aegisub.cancel!
 
 	if tr_center
 		t_center = coord[1]\add(coord[2])\add(coord[3])\add(coord[4])\mul(0.25)

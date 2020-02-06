@@ -1,7 +1,7 @@
 script_name = "PolyAss"
 script_description = "Performs boolean operations on polygons"
 script_author = "Alen"
-script_version = "1.0"
+script_version = "1.1"
 
 [[SOME NOTES:
 
@@ -94,7 +94,7 @@ export LinkedList = {
 	node: (data) ->
 		data.prev = nil
 		data.next = nil
-		data.remove= ->
+		data.remove = ->
 			data.prev.next = data.next
 			if data.next
 				data.next.prev = data.prev
@@ -104,10 +104,10 @@ export LinkedList = {
 		return data
 }
 
-export Intersecter = (selfIntersection, eps) ->
+Intersecter = (selfIntersection, eps) ->
 	segmentNew = (start, fine) ->
 		return {
-			id: "?",
+			id: nil,
 			start: start,
 			fine: fine,
 			myFill: {
@@ -196,17 +196,6 @@ export Intersecter = (selfIntersection, eps) ->
 		eventUpdateEnd(ev, pt)
 		return eventAddSegment(ns, ev.primary)
 
-	addRegion = (region) ->
-		pt1 = nil
-		pt2 = region[#region]
-		for i = 1, #region
-			pt1 = pt2
-			pt2 = region[i]
-
-			forward = Epsilon.pointsCompare(pt1, pt2)
-			if forward != 0
-				eventAddSegment(segmentNew(forward < 0 and pt1 or pt2, forward < 0 and pt2 or pt1), true)
-
 	calculate = (primaryPolyInverted, secondaryPolyInverted) ->
 
 		status_root = LinkedList.create!
@@ -238,12 +227,14 @@ export Intersecter = (selfIntersection, eps) ->
 			a2 = seg1.fine
 			b1 = seg2.start
 			b2 = seg2.fine
-
-			if Epsilon.linesIntersect(a1, a2, b1, b2) == false
+			
+			i = Epsilon.linesIntersect(a1, a2, b1, b2)
+			
+			if i == false
 				if not Epsilon.pointsCollinear(a1, a2, b1)
 					return false
 
-				if Epsilon.pointsSame(a1, b2) and Epsilon.pointsSame(a2, b1)
+				if Epsilon.pointsSame(a1, b2) or Epsilon.pointsSame(a2, b1)
 					return false
 
 				a1_equ_b1 = Epsilon.pointsSame(a1, b1)
@@ -272,20 +263,20 @@ export Intersecter = (selfIntersection, eps) ->
 					eventDivide(ev2, a1)
 
 			else
-				if Epsilon.linesIntersect(a1, a2, b1, b2).alongA == 0
-					if Epsilon.linesIntersect(a1, a2, b1, b2).alongB == -1
+				if i.alongA == 0
+					if i.alongB == -1
 						eventDivide(ev1, b1)
-					elseif Epsilon.linesIntersect(a1, a2, b1, b2).alongB == 0
-						eventDivide(ev1, Epsilon.linesIntersect(a1, a2, b1, b2).pt)
-					elseif Epsilon.linesIntersect(a1, a2, b1, b2).alongB == 1
+					elseif i.alongB == 0
+						eventDivide(ev1, i.pt)
+					elseif i.alongB == 1
 						eventDivide(ev1, b2)
 
-				if Epsilon.linesIntersect(a1, a2, b1, b2).alongB == 0
-					if Epsilon.linesIntersect(a1, a2, b1, b2).alongA == -1
+				if i.alongB == 0
+					if i.alongA == -1
 						eventDivide(ev2, a1)
-					elseif Epsilon.linesIntersect(a1, a2, b1, b2).alongA == 0
-						eventDivide(ev2, Epsilon.linesIntersect(a1, a2, b1, b2).pt)
-					elseif Epsilon.linesIntersect(a1, a2, b1, b2).alongA == 1
+					elseif i.alongA == 0
+						eventDivide(ev2, i.pt)
+					elseif i.alongA == 1
 						eventDivide(ev2, a2)
 
 			return false
@@ -374,7 +365,9 @@ export Intersecter = (selfIntersection, eps) ->
 			else
 				st = ev.status
 
-				if st == nil then aegisub.log("PolyBool: Zero-length segment detected; your epsilon is probably too small or too large\n")
+				if st == nil
+					aegisub.log("PolyBool: Zero-length segment detected; your epsilon is probably too small or too large\n")
+					break
 
 				if status_root.exists(st.prev) and status_root.exists(st.next)
 					checkIntersection(st.prev.ev, st.next.ev)
@@ -420,15 +413,8 @@ export Intersecter = (selfIntersection, eps) ->
 				pt2 = region[i]
 
 				forward = Epsilon.pointsCompare(pt1, pt2)
-
 				if forward != 0
-					sNew, sNew2 = nil
-					if forward < 0 then sNew = pt1 else sNew = pt2
-					if forward < 0 then sNew2 = pt2 else sNew2 = pt1
-
-					eventAddSegment(segmentNew(sNew, sNew2), true)
-
-				i += 1,
+					eventAddSegment(segmentNew(forward < 0 and pt1 or pt2, forward < 0 and pt2 or pt1), true),
 
 		calculate: (inverted) ->
 			return calculate(inverted, false)
@@ -457,17 +443,20 @@ export Epsilon = {
 		d_ry_ly = right[2] - left[2]
 
 		dot = d_px_lx * d_rx_lx + d_py_ly * d_ry_ly
-
 		if dot < eps
+			return false
+		
+		sqlen = d_rx_lx * d_rx_lx + d_ry_ly * d_ry_ly
+		if (dot - sqlen > -eps)
 			return false
 
 		return true,
 
 	pointsSameX: (p1, p2) ->
-		return math.abs(p1[1] - p2[1]) < 0.0000000001,
+		return math.abs(p1[1] - p2[1]) < eps,
 
 	pointsSameY: (p1, p2) ->
-		return math.abs(p1[2] - p2[2]) < 0.0000000001,
+		return math.abs(p1[2] - p2[2]) < eps,
 
 	pointsSame: (p1, p2) ->
 		return Epsilon.pointsSameX(p1, p2) and Epsilon.pointsSameY(p1, p2),
@@ -481,7 +470,10 @@ export Epsilon = {
 			elseif not (p1[2] < p2[2])
 				return 1
 
-		if p1[1] < p2[1] return -1 else 1,
+		if p1[1] < p2[1]
+			return -1
+		else
+			return 1,
 
 	pointsCollinear: (pt1, pt2, pt3) ->
 		dx1 = pt1[1] - pt2[1]
@@ -555,12 +547,10 @@ export Epsilon = {
 			last_x = curr_x
 			last_y = curr_y
 
-			i += 1
-
 		return inside
 }
 
-export select = (segments, selection) ->
+select = (segments, selection) ->
 	result = {}
 
 	func = (seg) ->
@@ -588,7 +578,7 @@ export select = (segments, selection) ->
 
 	return result
 
-export SegmentSelector = {
+SegmentSelector = {
 	union: (segments) ->
 		return select(segments, {
 			0, 2, 1, 0,
@@ -629,7 +619,7 @@ export SegmentSelector = {
 		})
 }
 
-export SegmentChainer = (segments, eps) ->
+SegmentChainer = (segments, eps) ->
 	chains = {}
 	regions = {}
 
@@ -1044,12 +1034,12 @@ InnerShadow = (sub, sel) ->
 		currLine = 0
 		for si, li in ipairs(sel)
 			line = sub[li]
-			local pol, posx, posy
+			
+			local pol
+			posx, posy = line.text\match("^{[^}]-\\pos%(([-%d.]+).([-%d.]+)%)")
+			if posx == nil then posx, posy = 0, 0
 
 			if config.convertText
-
-				posx, posy = line.text\match("^{[^}]-\\pos%(([-%d.]+).([-%d.]+)%)")
-				if posx == nil then posx, posy = 0, 0
 				text2 = line.text
 				text2 = text2\gsub("%b{}","")
 				family = "Arial"

@@ -1,7 +1,7 @@
-script_name = "Shapery"
-script_description = "Try to emulate the most used tools of Illustrator."
-script_author = "Alen"
-script_version = "1.0.0"
+export script_name = "Shapery"
+export script_description = "Try to emulate the most used tools of Illustrator."
+export script_author = "Alen"
+export script_version = "1.0.0"
 
 Helptext = "====== Comment and credits ======
 I'm not a programmer, most of the code is just a 1:1 copy from somewhere rewrote in moonscript.
@@ -1998,8 +1998,8 @@ class Clipper extends ClipperBase
 					j = @m_GhostJoins[i]
 
 					if (@HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
-						@AddJoin(j.OutP
-							t1, Op1, j.OffPt)
+						@AddJoin(j.OutPt1, Op1, j.OffPt)
+
 			--Temporary
 			if (lb.OutIdx >= 0 and lb.PrevInAEL != nil and lb.PrevInAEL.Curr.X == lb.Bot.X and lb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.OldSlopesEqual5(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, @m_UseFullRange) and lb.WindDelta != 0 and lb.PrevInAEL.WindDelta != 0)
 			--if (lb.OutIdx >= 0 and lb.PrevInAEL != nil and lb.PrevInAEL.Curr.X == lb.Bot.X and lb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.SlopesEqual5(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top) and lb.WindDelta != 0 and lb.PrevInAEL.WindDelta != 0)
@@ -4986,9 +4986,7 @@ Main = (sub, sel) ->
 					elseif i == num
 						current_c = RGB(end_c.r, end_c.g, end_c.b)
 					else
-						current_c = RGB(invert_red == false and current_c.r + red or current_c.r - red,
-										invert_green == false and current_c.g + green or current_c.g - green,
-										invert_blue == false and current_c.b + blue or current_c.b - blue)
+						current_c = RGB(invert_red == false and current_c.r + red or current_c.r - red, invert_green == false and current_c.g + green or current_c.g - green, invert_blue == false and current_c.b + blue or current_c.b - blue)
 
 					table.insert(result, "\\c&H" .. dec_to_hex(Round(current_c.b, 0)) .. dec_to_hex(Round(current_c.g, 0)) .. dec_to_hex(Round(current_c.r, 0)) .. "&")
 

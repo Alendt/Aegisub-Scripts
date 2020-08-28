@@ -4640,7 +4640,7 @@ Aegihelp.GetLine = (line) ->
 
 	local shape
 	if text\match '^{[^}]-\\p1'
-		shape = text\match '}([^{]+)'
+		shape = line.text_stripped
 
 	getStr = (tag, default) -> text\match("{[^}]-\\#{tag}([^\\]+)") or default
 	getNum = (tag, default) -> tonumber(text\match "{[^}]-\\#{tag}(%-?[0-9.]+)") or default
@@ -4749,6 +4749,7 @@ Main = (sub, sel) ->
 
 	for si, li in ipairs(sel)
 		line = sub[li]
+		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 
 		ft1 = res.subjectfilltype == "EvenOdd" and ClipperLib.PolyFillType.pftEvenOdd or ClipperLib.PolyFillType.pftNonZero
@@ -5053,6 +5054,7 @@ ClipToShape = (sub, sel) ->
 	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
+		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 		line.text = "{\\an7\\blur1\\bord0\\shad0\\fscx100\\fscy100\\pos(0,0)\\p1}" .. data.clip
 		sub[li] = line
@@ -5061,6 +5063,7 @@ ShapeToClip = (sub, sel) ->
 	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
+		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 		if data.pos.x != 0 or data.pos.y != 0
 			data.shape = Yutils.shape.move(data.shape, data.pos.x, data.pos.y)
@@ -5072,6 +5075,7 @@ Expand = (sub, sel) ->
 	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
+		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 		matrix = Matrix(Aegihelp.AegiToClipper(data.shape))
 		if data.fax != 0 or data.fay != 0

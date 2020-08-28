@@ -4745,7 +4745,7 @@ Main = (sub, sel) ->
 		if run == "Shapery"
 			run, res = aegisub.dialog.display(GUI.main, {"Pathfinder", "Offsetting", "Others", "Gradient", "Help", "Exit"}, {close: "Exit"})
 
-	meta, styles = karaskel.collect_head subs, false
+	meta, styles = karaskel.collect_head sub, false
 
 	for si, li in ipairs(sel)
 		line = sub[li]

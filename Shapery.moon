@@ -4657,7 +4657,7 @@ Aegihelp.GetLine = (line) ->
 		italic:    getBool 'i',    style.italic
 		underline: getBool 'u',    style.underline
 		strikeout: getBool 's',    style.strikeout
-		size:      getBool 'fs',   style.fontsize
+		size:      getNum  'fs',   style.fontsize
 		xscale:    getNum  'fscx', style.scale_x
 		yscale:    getNum  'fscy', style.scale_y
 		hspace:    getNum  'fsp',  style.spacing

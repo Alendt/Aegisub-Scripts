@@ -4640,7 +4640,7 @@ Aegihelp.GetLine = (line) ->
 
 	local shape
 	if text\match '^{[^}]-\\p1'
-		shape = line.text_stripped
+		shape = text\match '}([^{]+)'
 
 	x, y = text\match '{[^}]-\\pos%(([%d.-]+),([%d.-]+)%)'
 	x = tonumber(x) or line.x
@@ -4671,7 +4671,7 @@ Aegihelp.GetLine = (line) ->
 		fax:       getNum  'fax',  0
 		fay:       getNum  'fay',  0
 		shad:      getNum  'shad', style.shadow
-		text: line.text_stripped
+		text: text\gsub '%b{}', ''
 		pos: {:x, :y}
 	}
 

@@ -4642,6 +4642,10 @@ Aegihelp.GetLine = (line) ->
 	if text\match '^{[^}]-\\p1'
 		shape = line.text_stripped
 
+	x, y = text\match '{[^}]-\\pos%(([%d.-]+),([%d.-]+)%)'
+	x = tonumber(x) or line.x
+	y = tonumber(y) or line.y
+
 	getStr = (tag, default) -> text\match("{[^}]-\\#{tag}([^\\]+)") or default
 	getNum = (tag, default) -> tonumber(text\match "{[^}]-\\#{tag}(%-?[0-9.]+)") or default
 	getBool = (tag, default) -> switch text\match "{[^}]-\\#{tag}([01])"
@@ -4668,7 +4672,7 @@ Aegihelp.GetLine = (line) ->
 		fay:       getNum  'fay',  0
 		shad:      getNum  'shad', style.shadow
 		text: line.text_stripped
-		pos: {x: line.x, y: line.y}
+		pos: {:x, :y}
 	}
 
 Aegihelp.TextToShape = (data) ->

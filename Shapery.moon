@@ -68,6 +68,7 @@ It has a problem that i don't know how to explain. It's easy to fix anyway."
 
 
 Yutils = include("Yutils.lua")
+require 'karaskel'
 
 ClipperLib = {
 	use_lines: true,
@@ -4627,48 +4628,55 @@ Aegihelp.ClipperToAegi = (a) ->
 	return strs
 
 Aegihelp.GetLine = (line) ->
+	text, style = line.text, line.styleref
 
-	clip = line\match("\\i?clip%b()")
-
-	if clip != nil and clip\match("([%d.-]+),([%d.-]+),([%d.-]+),([%d.-]+)")
-		a, b, c, d = line\match("([%d.-]+),([%d.-]+),([%d.-]+),([%d.-]+)")
-		clip = string.format("m %d %d l %d %d %d %d %d %d", a, b, c, b, c, d, a, d)
-	
+	clip = text\match '\\i?clip%b()'
 	if clip != nil
-		clip = clip\gsub("\\i?clip%(", "")
-		clip = clip\gsub("%)", "")
+		x1, y1, x2, y2 = clip\match '([%d.-]+),([%d.-]+),([%d.-]+),([%d.-]+)'
+		if x1 != nil
+			clip = "m #{x1} #{y1} l #{x2} #{y1} #{x2} #{y2} #{x1} #{y2}"
+		else
+			clip = clip\gsub('\\i?clip%(', '')\gsub('%)', '')
 
-	shape = nil
-	if line\match("^{[^}]-\\p1")
-		shape = line\match("}([^{]+)")
+	local shape
+	if text\match '^{[^}]-\\p1'
+		shape = text\match '}([^{]+)'
+
+	x, y = text\match '{[^}]-\\pos%(([%d.-]+),([%d.-]+)%)'
+	x = tonumber(x) or line.x
+	y = tonumber(y) or line.y
+
+	getStr = (tag, default) -> text\match("{[^}]-\\#{tag}([^\\]+)") or default
+	getNum = (tag, default) -> tonumber(text\match "{[^}]-\\#{tag}(%-?[0-9.]+)") or default
+	getBool = (tag, default) -> switch text\match "{[^}]-\\#{tag}([01])"
+		when '0' then false
+		when '1' then true
+		when nil then default
 
 	return {
-		clip: clip,
-		shape: shape,
-		family: line\match("\\fn([^\\]+)") or "Arial",
-		bold: line\match("\\b1") and true or false,
-		italic: line\match("\\i1") and true or false,
-		underline: line\match("\\u1") and true or false,
-		strikeout: line\match("\\s1") and true or false,
-		size: line\match("^{[^}]-\\fs([%d%.%-]+)") or 50,
-		xscale: line\match("^{[^}]-\\fscx([%d%.%-]+)") or 100,
-		yscale: line\match("^{[^}]-\\fscy([%d%.%-]+)") or 100,
-		hspace: line\match("^{[^}]-\\fsp([%d%.%-]+)") or 0,
-		frx: line\match("^{[^}]-\\frx([%d%.%-]+)") or 0,
-		fry: line\match("^{[^}]-\\fry([%d%.%-]+)") or 0,
-		frz: line\match("^{[^}]-\\frz([%d%.%-]+)") or 0,
-		fax: line\match("^{[^}]-\\fax([%d%.%-]+)") or 0,
-		fay: line\match("^{[^}]-\\fay([%d%.%-]+)") or 0,
-		text: line\gsub("%b{}",""),
-		pos: {
-			x: line\match("\\pos%(([%d.-]+),") or 0,
-			y: line\match("\\pos%([%d.-]+,([%d.-]+)") or 0
-		},
-		shad: line\match("^{[^}]-\\shad([%d%.%-]+)") or nil
+		:clip
+		:shape
+		family:    getStr  'fn',   style.fontname
+		bold:      getBool 'b',    style.bold
+		italic:    getBool 'i',    style.italic
+		underline: getBool 'u',    style.underline
+		strikeout: getBool 's',    style.strikeout
+		size:      getNum  'fs',   style.fontsize
+		xscale:    getNum  'fscx', style.scale_x
+		yscale:    getNum  'fscy', style.scale_y
+		hspace:    getNum  'fsp',  style.spacing
+		frx:       getNum  'frx',  0
+		fry:       getNum  'fry',  0
+		frz:       getNum  'frz',  style.angle
+		fax:       getNum  'fax',  0
+		fay:       getNum  'fay',  0
+		shad:      getNum  'shad', style.shadow
+		text: text\gsub '%b{}', ''
+		pos: {:x, :y}
 	}
 
 Aegihelp.TextToShape = (data) ->
-	textshape = Yutils.decode.create_font(data.family, data.bold, data.italic, data.underline, data.strikeout, tonumber(data.size), tonumber(data.xscale) / 100, tonumber(data.yscale) / 100, tonumber(data.hspace)).text_to_shape(data.text)
+	textshape = Yutils.decode.create_font(data.family, data.bold, data.italic, data.underline, data.strikeout, data.size, data.xscale / 100, data.yscale / 100, data.hspace).text_to_shape(data.text)
 	center = Aegihelp.FindCenter(textshape)
 	textshape = Yutils.shape.move(textshape, -(tonumber(center.x)), -(tonumber(center.y)))
 	return textshape
@@ -4741,9 +4749,12 @@ Main = (sub, sel) ->
 		if run == "Shapery"
 			run, res = aegisub.dialog.display(GUI.main, {"Pathfinder", "Offsetting", "Others", "Gradient", "Help", "Exit"}, {close: "Exit"})
 
+	meta, styles = karaskel.collect_head sub, false
+
 	for si, li in ipairs(sel)
 		line = sub[li]
-		data = Aegihelp.GetLine(line.text)
+		karaskel.preproc_line sub, meta, styles, line
+		data = Aegihelp.GetLine(line)
 
 		ft1 = res.subjectfilltype == "EvenOdd" and ClipperLib.PolyFillType.pftEvenOdd or ClipperLib.PolyFillType.pftNonZero
 		ft2 = res.clipfilltype == "EvenOdd" and ClipperLib.PolyFillType.pftEvenOdd or ClipperLib.PolyFillType.pftNonZero
@@ -4896,7 +4907,7 @@ Main = (sub, sel) ->
 
 				return str
 
-			split = split_line(Aegihelp.GetLine(line.text).clip)--data.clip)
+			split = split_line(Aegihelp.GetLine(line).clip)--data.clip)
 
 			perp_line = {}
 			for i = 1, #split - 1
@@ -5030,7 +5041,7 @@ Main = (sub, sel) ->
 				gradline.text = gradline.text\gsub("{", "{" .. risultato_colori[i])
 				for i = 1, #solution_paths
 					gradline.text = gradline.text .. solution_paths[i]
-				if Aegihelp.GetLine(gradline.text).shape == nil
+				if Aegihelp.GetLine(gradline).shape == nil
 					continue
 				sub.insert(li + i2 + #col, gradline)
 				i2 += 1
@@ -5044,26 +5055,32 @@ Main = (sub, sel) ->
 			break
 
 ClipToShape = (sub, sel) ->
+	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
-		data = Aegihelp.GetLine(line.text)
+		karaskel.preproc_line sub, meta, styles, line
+		data = Aegihelp.GetLine(line)
 		line.text = "{\\an7\\blur1\\bord0\\shad0\\fscx100\\fscy100\\pos(0,0)\\p1}" .. data.clip
 		sub[li] = line
 
 ShapeToClip = (sub, sel) ->
+	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
-		data = Aegihelp.GetLine(line.text)
+		karaskel.preproc_line sub, meta, styles, line
+		data = Aegihelp.GetLine(line)
 		if data.pos.x != 0 or data.pos.y != 0
-			data.shape = Yutils.shape.move(data.shape, tonumber(data.pos.x), tonumber(data.pos.y))
+			data.shape = Yutils.shape.move(data.shape, data.pos.x, data.pos.y)
 		line.text = line.text\gsub("\\i?clip%b()", "")
 		line.text = line.text\gsub("}", "\\clip(" .. data.shape .. ")}")
 		sub[li] = line
 
 Expand = (sub, sel) ->
+	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
-		data = Aegihelp.GetLine(line.text)
+		karaskel.preproc_line sub, meta, styles, line
+		data = Aegihelp.GetLine(line)
 		matrix = Matrix(Aegihelp.AegiToClipper(data.shape))
 		if data.fax != 0 or data.fay != 0
 			matrix\Shear(data.fax, data.fay)

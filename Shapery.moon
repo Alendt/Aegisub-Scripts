@@ -1,7 +1,7 @@
 export script_name = "Shapery"
 export script_description = "Try to emulate the most used tools of Illustrator."
 export script_author = "Alen"
-export script_version = "1.0.0"
+export script_version = "1.1.0"
 
 Helptext = "====== Comment and credits ======
 I'm not a programmer, most of the code is just a 1:1 copy from somewhere rewrote in moonscript.
@@ -31,7 +31,6 @@ Look it up online for the difference or just use NonZero.
 Inflating and deflating polygons.
 The angles can have 3 style: miter, round and square.
 The arc tolerance define the precision a curve will have if the style Round is used.
-This is super bugged right now (for example https://i.imgur.com/hhXeYgh.png . Even the javascript version has this problem). This will be hard to fix because I have to use the c++ version as reference, but I'll try eventually.
 
 ====== Others ======
 -Text to shape
@@ -58,7 +57,7 @@ There should also be an option to let the user chose the overlap size, but from 
 ====== TO-DO ======
 1. A function that 'expands' fax(done), fay(done), frz, frx, fry, fscx(done), fscy(done).
 Beside frx and fry I have all this done already. I'm trying to understand how libass does that, but again I'm very bad at understand c and also very bad at math.
-2. Simply polygon by recreating bezier curve.
+2. Simplify polygons by recreating bezier curve.
 The automation don't work with bezier, so all the path are flattened before being passed to the automation.
 By my understanding this only affect the filesize and not the renderer (at least libass), so it's fine to not have this for now. I'm not really sure about this, I might be wrong. 
 3. Shape generator.
@@ -72,7 +71,6 @@ require 'karaskel'
 
 ClipperLib = {
 	use_lines: true,
-	use_xyz: false,
 
 	Clear: ->
 		return {},
@@ -156,105 +154,24 @@ ClipperLib = {
 	}
 }
 
--- Temporary. yea i know this is totally useless etc shhh
-ClipperLib.Cast_Int64 = (a) ->
-	tr = nil
-	if a < 0
-		tr = a
-	else
-		tr = a
-	return tr
+ClipperLib.Error = (message) ->
+	aegisub.log(message)
+	aegisub.cancel!
 
-ClipperLib.Cast_Int32 = (a) ->
-	return BitNOT(a)
+ClipperLib.ClipperBase.SlopesEqual = (...) ->
+	a = {...}
 
-ClipperLib.ClipperBase.OldSlopesEqual3 = (e1, e2, UseFullRange) ->
-	if (UseFullRange)
-		return Int128.op_Equality(Int128.Int128Mul(e1.Delta.Y, e2.Delta.X), Int128.Int128Mul(e1.Delta.X, e2.Delta.Y))
-	else
-		return ClipperLib.Cast_Int64((e1.Delta.Y) * (e2.Delta.X)) == ClipperLib.Cast_Int64((e1.Delta.X) * (e2.Delta.Y))
+	if #a == 2 -- ClipperLib.ClipperBase.SlopesEqual3 = (e1, e2) ->
+		e1, e2 = a[1], a[2]
+		return ((e1.Delta.Y) * (e2.Delta.X)) == ((e1.Delta.X) * (e2.Delta.Y))
 
-ClipperLib.ClipperBase.OldSlopesEqual4 = (pt1, pt2, pt3, UseFullRange) ->
-	if UseFullRange
-		return Int128.op_Equality(Int128.Int128Mul(pt1.Y - pt2.Y, pt2.X - pt3.X), Int128.Int128Mul(pt1.X - pt2.X, pt2.Y - pt3.Y))
-	else
-		return ClipperLib.Cast_Int64((pt1.Y - pt2.Y) * (pt2.X - pt3.X)) - ClipperLib.Cast_Int64((pt1.X - pt2.X) * (pt2.Y - pt3.Y)) == 0
+	elseif #a == 3 -- ClipperLib.ClipperBase.SlopesEqual4 = (pt1, pt2, pt3) ->
+		pt1, pt2, pt3 = a[1], a[2], a[3]
+		return ((pt1.Y - pt2.Y) * (pt2.X - pt3.X)) - ((pt1.X - pt2.X) * (pt2.Y - pt3.Y)) == 0
 
-ClipperLib.ClipperBase.OldSlopesEqual5 = (pt1, pt2, pt3, pt4, UseFullRange) ->
-	if (UseFullRange)
-		return Int128.op_Equality(Int128.Int128Mul(pt1.Y - pt2.Y, pt3.X - pt4.X), Int128.Int128Mul(pt1.X - pt2.X, pt3.Y - pt4.Y))
-	else
-		return ClipperLib.Cast_Int64((pt1.Y - pt2.Y) * (pt3.X - pt4.X)) - ClipperLib.Cast_Int64((pt1.X - pt2.X) * (pt3.Y - pt4.Y)) == 0
-
-class DoublePoint
-	new: (...) =>
-		a = {...}
-		@X = 0
-		@Y = 0
-		if #a == 1
-			@X = a[1].X
-			@Y = a[1].Y
-		elseif #a == 2
-			@X = a[1]
-			@Y = a[2]
-
-	class_name: "DoublePoint"
-
-class DoublePoint0
-	new: =>
-		@X = 0
-		@Y = 0
-
-class DoublePoint1
-	new: (dp) =>
-		@X = dp.X
-		@Y = dp.Y
-
-class DoublePoint2
-	new: (x, y) =>
-		@X = x
-		@Y = y
-
---
-
-BitAND2 = (a, b) ->
-	result = 0
-	bitval = 1
-	while a > 0 and b > 0
-		if a % 2 == 1 and b % 2 == 1
-			result = result + bitval
-		bitval = bitval * 2
-		a = math.floor(a/2)
-		b = math.floor(b/2)
-	return result
-
-
-BitAND = (a, b) ->
-	p, c = 1, 0
-	while a>0 and b>0
-		ra, rb = a%2, b%2
-		if ra+rb>1 then c = c+p
-		a, b, p = (a-ra)/2, (b-rb)/2, p*2
-
-	return c
-
-BitNOT = (n) ->
-	p, c = 1, 0
-	while n>0
-		r = n%2
-		if r<1 then c=c+p
-		n, p = (n-r) / 2, p*2
-
-	return c
-
-BitOR = (a, b) ->
-	p, c = 1, 0
-	while a+b>0
-		ra, rb = a%2, b%2
-		if ra+rb>0 then c = c + p
-		a, b, p = (a-ra)/2, (b-rb)/2, p*2
-
-	return c
+	elseif #a == 4 -- ClipperLib.ClipperBase.SlopesEqual5 = (pt1, pt2, pt3, pt4) ->
+		pt1, pt2, pt3, pt4 = a[1], a[2], a[3], a[4]
+		return ((pt1.Y - pt2.Y) * (pt3.X - pt4.X)) - ((pt1.X - pt2.X) * (pt3.Y - pt4.Y)) == 0
 
 BitXOR = (a, b) ->
 	p, c = 1, 0
@@ -274,10 +191,6 @@ BitXOR = (a, b) ->
 Round = (val, dec) ->
 	if dec == nil then dec = ClipperLib.rDecimals
 	return math.floor((val * 10^dec) + 0.5) / (10^dec)
-
-ClipperLib.Error = (message) ->
-	aegisub.log(message)
-	aegisub.cancel!
 
 class Path
 	new: =>
@@ -370,100 +283,24 @@ class PolyTree extends PolyNode
 class Point
 	new: (...) =>
 		a = {...}
-		alen = #a
-
 		@X = 0
 		@Y = 0
-		if ClipperLib.use_xyz
-			@Z = 0
 
-			if alen == 3
-				@X = a[1]
-				@Y = a[2]
-				@Z = a[3]
-			elseif alen == 2
-				@X = a[1]
-				@Y = a[2]
-				@Z = 0
-			elseif alen == 1
-				if a[1].class_name == "DoublePoint"
-					dp = a[1]
-					@X = dp.X
-					@Y = dp.Y
-					@Z = 0
-
-				else
-					pt = a[1]
-					pt.Z = 0 if pt.Z == nil
-					@X = pt.X
-					@Y = pt.Y
-					@Z = pt.Z
-
-			else
-				@X = 0
-				@Y = 0
-				@Z = 0
-
-		else -- if not ClipperLib.use_xyz
-			if alen == 2
-				@X = a[1]
-				@Y = a[2]
-
-			elseif alen == 1
-				if a[1].class_name == Point
-					dp = a[1]
-					@X = dp.X
-					@Y = dp.Y
-
-				else
-					pt = a[1]
-					@X = pt.X
-					@Y = pt.Y
-
-			else
-				@X = 0
-				@Y = 0
-
-	class_name: "Point"
+		if #a == 1
+			@X = a[1].X
+			@Y = a[1].Y
+		elseif #a == 2
+			@X = a[1]
+			@Y = a[2]
+		else
+			@X = 0
+			@Y = 0
 
 ClipperLib.Point.op_Equality = (a, b) ->
 	return a.X == b.X and a.Y == b.Y
 
 ClipperLib.Point.op_Inequality = (a, b) ->
 	return a.X != b.X or a.Y != b.Y
-
-class Point0
-	new: =>
-		@X = 0
-		@Y = 0
-		if ClipperLib.use_xyz
-			@Z = 0
-
-class Point1
-	new: (pt) =>
-		@X = pt.X
-		@Y = pt.Y
-		if ClipperLib.use_xyz
-			@Z = 0 if pt.Z == nil
-		else
-			@Z = pt.Z
-
-class Point1dp
-	new: (dp) =>
-		@X = dp.X
-		@Y = dp.Y
-		if ClipperLib.use_xyz
-			@Z = 0
-
-class Point2
-	new: (x, y, z) =>
-		@X = x
-		@Y = y
-		if ClipperLib.use_xyz
-			if (z == nil)
-				@Z = 0
-			else
-				@Z = z
 
 class Rect
 	new: (...) =>
@@ -486,33 +323,12 @@ class Rect
 			@right = 0
 			@bottom = 0
 
-class Rect0
-	new: =>
-		@left = 0
-		@top = 0
-		@right = 0
-		@bottom = 0
-
-class Rect1
-	new: (ir) =>
-		@left = ir.left
-		@top = ir.top
-		@right = ir.right
-		@bottom = ir.bottom
-
-class Rect4
-	new: (l, t, r, b) =>
-		@left = l
-		@top = t
-		@right = r
-		@bottom = b
-
 class TEdge
 	new: =>
-		@Bot = Point0!
-		@Curr = Point0! --current (updated for every new scanbeam)
-		@Top = Point0!
-		@Delta = Point0!
+		@Bot = Point!
+		@Curr = Point! --current (updated for every new scanbeam)
+		@Top = Point!
+		@Delta = Point!
 		@Dx = 0
 		@PolyTyp = ClipperLib.PolyType.ptSubject
 		@Side = ClipperLib.EdgeSide.esLeft -- side only refers to current side of solution poly
@@ -532,7 +348,7 @@ class IntersectNode
 	new: =>
 		@Edge1 = nil
 		@Edge2 = nil
-		@Pt = Point0!
+		@Pt = Point!
 
 ClipperLib.MyIntersectNodeSort.Compare = (node1, node2) ->
 	i = node2.Pt.Y - node1.Pt.Y
@@ -574,7 +390,7 @@ class OutRec
 class OutPt
 	new: =>
 		@Idx = 0
-		@Pt = Point0!
+		@Pt = Point!
 		@Next = nil
 		@Prev = nil
 
@@ -582,7 +398,7 @@ class Join
 	new: =>
 		@OutPt1 = nil
 		@OutPt2 = nil
-		@OffPt = Point0!
+		@OffPt = Point!
 
 ClipperLib.ClipperBase.near_zero = (val) ->
 	return (val > -ClipperLib.ClipperBase.tolerance) and (val < ClipperLib.ClipperBase.tolerance)
@@ -590,39 +406,7 @@ ClipperLib.ClipperBase.near_zero = (val) ->
 ClipperLib.ClipperBase.IsHorizontal = (e) ->
 	return e.Delta.Y == 0
 
-ClipperLib.ClipperBase.SlopesEqual = (...) ->
-	a = {...}
-	alen = #a
-	local e1, e2, pt1, pt2, pt3, pt4
-	if (alen == 2) -- function (e1, e2)
-		e1 = a[1]
-		e2 = a[2]
-		return e1.Delta.Y * e2.Delta.X == e1.Delta.X * e2.Delta.Y
-
-	else if (alen == 3) -- function (pt1, pt2, pt3)
-		pt1 = a[1]
-		pt2 = a[2]
-		pt3 = a[3]
-		return (pt1.Y - pt2.Y) * (pt2.X - pt3.X) - (pt1.X - pt2.X) * (pt2.Y - pt3.Y) == 0
-
-	else -- function (pt1, pt2, pt3, pt4)
-		pt1 = a[1]
-		pt2 = a[2]
-		pt3 = a[3]
-		pt4 = a[4]
-		return (pt1.Y - pt2.Y) * (pt3.X - pt4.X) - (pt1.X - pt2.X) * (pt3.Y - pt4.Y) == 0
-
-ClipperLib.ClipperBase.SlopesEqual3 = (e1, e2) ->
-	return e1.Delta.Y * e2.Delta.X == e1.Delta.X * e2.Delta.Y
-
-ClipperLib.ClipperBase.SlopesEqual4 = (pt1, pt2, pt3) ->
-	return (pt1.Y - pt2.Y) * (pt2.X - pt3.X) - (pt1.X - pt2.X) * (pt2.Y - pt3.Y) == 0
-
-ClipperLib.ClipperBase.SlopesEqual5 = (pt1, pt2, pt3, pt4) ->
-	return (pt1.Y - pt2.Y) * (pt3.X - pt4.X) - (pt1.X - pt2.X) * (pt3.Y - pt4.Y) == 0
-
 class ClipperBase
-	--questi qua non vanno sotto new?
 	m_MinimaList: nil
 	m_CurrentLM: nil
 	m_edges: {}
@@ -631,9 +415,6 @@ class ClipperBase
 	m_Scanbeam: nil
 	m_PolyOuts: nil
 	m_ActiveEdges: nil
-
-	--Temporary
-	m_UseFullRange: false
 
 	PointIsVertex: (pt, pp) =>
 		pp2 = pp
@@ -647,39 +428,6 @@ class ClipperBase
 
 		return false
 
-	--Temporary
-	PointOnLineSegment: (pt, linePt1, linePt2, UseFullRange) =>
-		if UseFullRange
-			return ((pt.X == linePt1.X) and (pt.Y == linePt1.Y)) or ((pt.X == linePt2.X) and (pt.Y == linePt2.Y)) or (((pt.X > linePt1.X) == (pt.X < linePt2.X)) and ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) and (Int128.op_Equality(Int128.Int128Mul((pt.X - linePt1.X), (linePt2.Y - linePt1.Y)), Int128.Int128Mul((linePt2.X - linePt1.X), (pt.Y - linePt1.Y)))))
-		else
-			return ((pt.X == linePt1.X) and (pt.Y == linePt1.Y)) or ((pt.X == linePt2.X) and (pt.Y == linePt2.Y)) or (((pt.X > linePt1.X) == (pt.X < linePt2.X)) and ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) and ((pt.X - linePt1.X) * (linePt2.Y - linePt1.Y) == (linePt2.X - linePt1.X) * (pt.Y - linePt1.Y)))
-
-	[[PointOnLineSegment: (pt, linePt1, linePt2) =>
-		return ((pt.X == linePt1.X) and (pt.Y == linePt1.Y)) or ((pt.X == linePt2.X) and (pt.Y == linePt2.Y)) or (((pt.X > linePt1.X) == (pt.X < linePt2.X)) and ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) and ((pt.X - linePt1.X) * (linePt2.Y - linePt1.Y) == (linePt2.X - linePt1.X) * (pt.Y - linePt1.Y)))]]
-
-	--Temporary
-	PointOnPolygon: (pt, pp, UseFullRange) =>
-		pp2 = pp
-		while true do
-			if @PointOnLineSegment(pt, pp2.Pt, pp2.Next.Pt, UseFullRange)
-				return true
-			pp2 = pp2.Next
-			if pp2 == pp
-				break
-		return false
-
-	[[PointOnPolygon: (pt, pp) =>
-		pp2 = pp
-		while true do
-			if @PointOnLineSegment(pt, pp2.Pt, pp2.Next.Pt)
-				return true
-			pp2 = pp2.Next
-			if pp2 == pp
-				break
-
-		return false]]
-
-	--Temporary
 	Clear: =>
 		@DisposeLocalMinimaList!
 		for i = 1, #@m_edges
@@ -687,19 +435,7 @@ class ClipperBase
 				@m_edges[i][j] = nil
 			@m_edges[i] = ClipperLib.Clear!
 		@m_edges = ClipperLib.Clear!
-		@m_UseFullRange = false
 		@m_HasOpenPaths = false
-
-	[[Clear: =>
-		@DisposeLocalMinimaList!
-		for i = 1, #@m_edges
-			for j = 1, #@m_edges[i]
-				@m_edges[i][j] = nil
-			@m_edges[i] = ClipperLib.Clear!
-
-		@m_edges = ClipperLib.Clear!
-		@m_HasOpenPaths = false
-		@m_UseFullRange = false]]
 
 	DisposeLocalMinimaList: =>
 		while (@m_MinimaList != nil)
@@ -709,47 +445,26 @@ class ClipperBase
 
 		@m_CurrentLM = nil
 
-	--Temporary
-	RangeTest: (Pt, useFullRange) =>
-		if useFullRange.Value
-			if (Pt.X > ClipperLib.ClipperBase.hiRange or Pt.Y > ClipperLib.ClipperBase.hiRange or -Pt.X > ClipperLib.ClipperBase.hiRange or -Pt.Y > ClipperLib.ClipperBase.hiRange)
-				ClipperLib.Error("Coordinate outside allowed range in RangeTest().")
-		elseif (Pt.X > ClipperLib.ClipperBase.loRange or Pt.Y > ClipperLib.ClipperBase.loRange or -Pt.X > ClipperLib.ClipperBase.loRange or -Pt.Y > ClipperLib.ClipperBase.loRange)
-			useFullRange.Value = true
-			@RangeTest(Pt, useFullRange)
-
-	[[RangeTest: (pt) =>
-		if (pt.X > ClipperLib.ClipperBase.maxValue or pt.X < -ClipperLib.ClipperBase.maxValue or pt.Y > ClipperLib.ClipperBase.maxValue or pt.Y < -ClipperLib.ClipperBase.maxValue or (pt.X > 0 and pt.X < ClipperLib.ClipperBase.minValue) or (pt.Y > 0 and pt.Y < ClipperLib.ClipperBase.minValue) or (pt.X < 0 and pt.X > -ClipperLib.ClipperBase.minValue) or (pt.Y < 0 and pt.Y > -ClipperLib.ClipperBase.minValue))
-			ClipperLib.Error("Coordinate outside allowed range in RangeTest().")]]
-
 	InitEdge: (e, eNext, ePrev, pt) =>
 		e.Next = eNext
 		e.Prev = ePrev
 		e.Curr.X = pt.X
 		e.Curr.Y = pt.Y
-		if ClipperLib.use_xyz
-			e.Curr.Z = pt.Z
 		e.OutIdx = -1
 
 	InitEdge2: (e, polyType) =>
 		if (e.Curr.Y >= e.Next.Curr.Y)
 			e.Bot.X = e.Curr.X
 			e.Bot.Y = e.Curr.Y
-			if (ClipperLib.use_xyz)
-				e.Bot.Z = e.Curr.Z
+
 			e.Top.X = e.Next.Curr.X
 			e.Top.Y = e.Next.Curr.Y
-			if (ClipperLib.use_xyz)
-				e.Top.Z = e.Next.Curr.Z
 		else
 			e.Top.X = e.Curr.X
 			e.Top.Y = e.Curr.Y
-			if (ClipperLib.use_xyz)
-				e.Top.Z = e.Curr.Z
+
 			e.Bot.X = e.Next.Curr.X
 			e.Bot.Y = e.Next.Curr.Y
-			if (ClipperLib.use_xyz)
-				e.Bot.Z = e.Next.Curr.Z
 
 		@SetDx(e)
 		e.PolyTyp = polyType
@@ -919,19 +634,12 @@ class ClipperBase
 		--1. Basic (first) edge initialization ...
 		edges[2].Curr.X = pg[2].X
 		edges[2].Curr.Y = pg[2].Y
-		if ClipperLib.use_xyz
-			edges[2].Curr.Z = pg[2].Z
 
-		--non servono ma corretti
-		--@RangeTest(pg[1])
-		--@RangeTest(pg[highI])
 		
 		@InitEdge(edges[1], edges[2], edges[highI], pg[1])
 		@InitEdge(edges[highI], edges[1], edges[highI - 1], pg[highI])
 
 		for i = highI - 1, 2, -1
-			--non serve ma corretto
-			--@RangeTest(pg[i])
 			@InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i])
 
 		--2. Remove duplicate vertices, and (when closed) collinear edges ...
@@ -954,10 +662,7 @@ class ClipperBase
 			if E.Prev == E.Next
 				break
 			
-			--Temporary
-			elseif (Closed and ClipperLib.ClipperBase.OldSlopesEqual4(E.Prev.Curr, E.Curr, E.Next.Curr, @m_UseFullRange) and (not @PreserveCollinear or @Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))
-			--elseif (Closed and ClipperLib.ClipperBase.SlopesEqual4(E.Prev.Curr, E.Curr, E.Next.Curr) and (not @PreserveCollinear or @Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))
-			
+			elseif (Closed and ClipperLib.ClipperBase.SlopesEqual(E.Prev.Curr, E.Curr, E.Next.Curr) and (not @PreserveCollinear or @Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))			
 				if E == eStart
 					eStart = E.Next
 
@@ -1139,10 +844,6 @@ class ClipperBase
 		tmp = e.Top.X
 		e.Top.X = e.Bot.X
 		e.Bot.X = tmp
-		if (ClipperLib.use_xyz)
-			tmp = e.Top.Z
-			e.Top.Z = e.Bot.Z
-			e.Bot.Z = tmp
 
 	Reset: =>
 		@m_CurrentLM = @m_MinimaList
@@ -1159,16 +860,12 @@ class ClipperBase
 			if (e != nil)
 				e.Curr.X = e.Bot.X
 				e.Curr.Y = e.Bot.Y
-				if (ClipperLib.use_xyz)
-					e.Curr.Z = e.Bot.Z
 				e.OutIdx = ClipperLib.ClipperBase.Unassigned
 
 			e = lm.RightBound
 			if (e != nil)
 				e.Curr.X = e.Bot.X
 				e.Curr.Y = e.Bot.Y
-				if (ClipperLib.use_xyz)
-					e.Curr.Z = e.Bot.Z
 				e.OutIdx = ClipperLib.ClipperBase.Unassigned
 
 			lm = lm.Next
@@ -1455,24 +1152,6 @@ ClipperLib.Clipper.Area = (poly) ->
 
 	return -a * 0.5
 
-ClipperLib.Clipper.SimplifyPolygon = (poly, fillType) ->
-	result = {}
-	c = Clipper!
-	c.StrictlySimple = true
-	c\AddPath(poly, ClipperLib.PolyType.ptSubject, true)
-	succeeded, result = c\Execute(ClipperLib.ClipType.ctUnion, result, fillType, fillType)
-	return result
-
-ClipperLib.Clipper.SimplifyPolygons = (polys, fillType) ->
-	if (fillType == nil)
-		fillType = ClipperLib.PolyFillType.pftEvenOdd
-	result = {}
-	c = Clipper!
-	c.StrictlySimple = true
-	c\AddPaths(polys, ClipperLib.PolyType.ptSubject, true)
-	succeeded, result = c\Execute(ClipperLib.ClipType.ctUnion, result, fillType, fillType)
-	return result
-
 ClipperLib.Clipper.DistanceSqrd = (pt1, pt2) ->
 	dx = (pt1.X - pt2.X)
 	dy = (pt1.Y - pt2.Y)
@@ -1565,7 +1244,7 @@ ClipperLib.Clipper.CleanPolygon = (path, distance) ->
 		cnt = 0
 	result = {cnt}
 	for i = 1, cnt
-		result[i] = Point1(op.Pt)
+		result[i] = Point(op.Pt)
 		op = op.Next
 
 	outPts = nil
@@ -1576,140 +1255,6 @@ ClipperLib.Clipper.CleanPolygons = (polys, distance) ->
 	for i = 1, #polys
 		result[i] = ClipperLib.Clipper.CleanPolygon(polys[i], distance)
 	return result
-
-[[
-	ClipperLib.Clipper.Minkowski = function (pattern, path, IsSum, IsClosed)
-	{
-		var delta = (IsClosed ? 1 : 0);
-		var polyCnt = pattern.length;
-		var pathCnt = path.length;
-		var result = new Array();
-		if (IsSum)
-			for (var i = 0; i < pathCnt; i++)
-			{
-				var p = new Array(polyCnt);
-				for (var j = 0, jlen = pattern.length, ip = pattern[j]; j < jlen; j++, ip = pattern[j])
-					p[j] = new ClipperLib.FPoint2(path[i].X + ip.X, path[i].Y + ip.Y);
-				result.push(p);
-			}
-		else
-			for (var i = 0; i < pathCnt; i++)
-			{
-				var p = new Array(polyCnt);
-				for (var j = 0, jlen = pattern.length, ip = pattern[j]; j < jlen; j++, ip = pattern[j])
-					p[j] = new ClipperLib.FPoint2(path[i].X - ip.X, path[i].Y - ip.Y);
-				result.push(p);
-			}
-		var quads = new Array();
-		for (var i = 0; i < pathCnt - 1 + delta; i++)
-			for (var j = 0; j < polyCnt; j++)
-			{
-				var quad = new Array();
-				quad.push(result[i % pathCnt][j % polyCnt]);
-				quad.push(result[(i + 1) % pathCnt][j % polyCnt]);
-				quad.push(result[(i + 1) % pathCnt][(j + 1) % polyCnt]);
-				quad.push(result[i % pathCnt][(j + 1) % polyCnt]);
-				if (!ClipperLib.Clipper.Orientation(quad))
-					quad.reverse();
-				quads.push(quad);
-			}
-		return quads;
-	};
-
-	ClipperLib.Clipper.MinkowskiSum = function (pattern, path_or_paths, pathIsClosed)
-	{
-		if (!(path_or_paths[0] instanceof Array))
-		{
-			var path = path_or_paths;
-			var paths = ClipperLib.Clipper.Minkowski(pattern, path, true, pathIsClosed);
-			var c = new ClipperLib.Clipper();
-			c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
-			c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-			return paths;
-		}
-		else
-		{
-			var paths = path_or_paths;
-			var solution = new ClipperLib.Paths();
-			var c = new ClipperLib.Clipper();
-			for (var i = 0; i < paths.length; ++i)
-			{
-				var tmp = ClipperLib.Clipper.Minkowski(pattern, paths[i], true, pathIsClosed);
-				c.AddPaths(tmp, ClipperLib.PolyType.ptSubject, true);
-				if (pathIsClosed)
-				{
-					var path = ClipperLib.Clipper.TranslatePath(paths[i], pattern[0]);
-					c.AddPath(path, ClipperLib.PolyType.ptClip, true);
-				}
-			}
-			c.Execute(ClipperLib.ClipType.ctUnion, solution,
-				ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-			return solution;
-		}
-	}
-
-	ClipperLib.Clipper.TranslatePath = function (path, delta)
-	{
-		var outPath = new ClipperLib.Path();
-		for (var i = 0; i < path.length; i++)
-			outPath.push(new ClipperLib.FPoint2(path[i].X + delta.X, path[i].Y + delta.Y));
-		return outPath;
-	}
-
-	ClipperLib.Clipper.MinkowskiDiff = function (poly1, poly2)
-	{
-		var paths = ClipperLib.Clipper.Minkowski(poly1, poly2, false, true);
-		var c = new ClipperLib.Clipper();
-		c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
-		c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-		return paths;
-	}
-
-	ClipperLib.Clipper.PolyTreeToPaths = function (polytree)
-	{
-		var result = new Array();
-		//result.set_Capacity(polytree.get_Total());
-		ClipperLib.Clipper.AddPolyNodeToPaths(polytree, ClipperLib.Clipper.NodeType.ntAny, result);
-		return result;
-	};
-
-	ClipperLib.Clipper.AddPolyNodeToPaths = function (polynode, nt, paths)
-	{
-		var match = true;
-		switch (nt)
-		{
-			case ClipperLib.Clipper.NodeType.ntOpen:
-				return;
-			case ClipperLib.Clipper.NodeType.ntClosed:
-				match = !polynode.IsOpen;
-				break;
-			default:
-				break;
-		}
-		if (polynode.m_polygon.length > 0 && match)
-			paths.push(polynode.m_polygon);
-		for (var $i3 = 0, $t3 = polynode.Childs(), $l3 = $t3.length, pn = $t3[$i3]; $i3 < $l3; $i3++, pn = $t3[$i3])
-			ClipperLib.Clipper.AddPolyNodeToPaths(pn, nt, paths);
-	};
-
-	ClipperLib.Clipper.OpenPathsFromPolyTree = function (polytree)
-	{
-		var result = new ClipperLib.Paths();
-		//result.set_Capacity(polytree.ChildCount());
-		for (var i = 0, ilen = polytree.ChildCount(); i < ilen; i++)
-			if (polytree.Childs()[i].IsOpen)
-				result.push(polytree.Childs()[i].m_polygon);
-		return result;
-	};
-
-	ClipperLib.Clipper.ClosedPathsFromPolyTree = function (polytree)
-	{
-		var result = new ClipperLib.Paths();
-		//result.set_Capacity(polytree.Total());
-		ClipperLib.Clipper.AddPolyNodeToPaths(polytree, ClipperLib.Clipper.NodeType.ntClosed, result);
-		return result;
-	};
-]]
 
 class Clipper extends ClipperBase
 	new: (InitOptions) =>
@@ -1727,21 +1272,19 @@ class Clipper extends ClipperBase
 		@m_IntersectList = {}
 		@m_IntersectNodeComparer = ClipperLib.MyIntersectNodeSort.Compare
 		@m_ExecuteLocked = false
-		@m_UsingPolyTree = false
 		@m_PolyOuts = {}
 		@m_Joins = {}
 		@m_GhostJoins = {}
-		@ReverseSolution = BitAND2(1, 0) != 0
-		--@StrictlySimple = BitAND(2, InitOptions) != 0
-		--@PreserveCollinear = BitAND(4, InitOptions) != 0
-		if (ClipperLib.use_xyz)
-			@ZFillFunction = nil
+		@ReverseSolution = false
+		@StrictlySimple = false
+		--@PreserveCollinear = false
+
+		@FinalSolution = nil
 	
 	Clear: =>
 		if (#@m_edges == 0)
 			return
 		@DisposeAllPolyPts!
-		--ClipperLib.ClipperBase.prototype.Clear.call(this);dafare
 
 	InsertMaxima: (X) =>
 		--double-linked list: sorted ascending, ignoring dups.
@@ -1774,68 +1317,20 @@ class Clipper extends ClipperBase
 
 			m.Next = newMax
 
-	Execute: (...) =>
-		a = {...}
-		alen = #a
-		ispolytree = a[2].class_name == "PolyTree"
+	Execute: (clipType, subjFillType, clipFillType) =>
+		@m_ExecuteLocked = true
 
-		if alen == 4 and not ispolytree -- function (clipType, solution, subjFillType, clipFillType)
-			clipType = a[1]
-			solution = a[2]
-			subjFillType = a[3]
-			clipFillType = a[4]
-			if @m_ExecuteLocked
-				return false
-			if @m_HasOpenPaths
-				ClipperLib.Error("Error: PolyTree struct is needed for open path clipping.")
+		@m_SubjFillType = subjFillType
+		@m_ClipFillType = clipFillType
+		@m_ClipType = clipType
+		@m_UsingPolyTree = false
 
-			@m_ExecuteLocked = true
-			solution = ClipperLib.Clear!
-			@m_SubjFillType = subjFillType
-			@m_ClipFillType = clipFillType
-			@m_ClipType = clipType
-			@m_UsingPolyTree = false
+		succeeded = @ExecuteInternal!
+		if (succeeded)
+			@BuildResult!
 
-			succeeded = @ExecuteInternal!
-			if (succeeded)
-				solution = @BuildResult!
-
-			@DisposeAllPolyPts!
-			@m_ExecuteLocked = false
-
-			return succeeded, solution
-
-		elseif alen == 4 and ispolytree -- function (clipType, polytree, subjFillType, clipFillType)
-			clipType = a[1]
-			polytree = a[2]
-			subjFillType = a[3]
-			clipFillType = a[4]
-			if @m_ExecuteLocked
-				return false
-			@m_ExecuteLocked = true
-			@m_SubjFillType = subjFillType
-			@m_ClipFillType = clipFillType
-			@m_ClipType = clipType
-			@m_UsingPolyTree = true
-		
-			succeeded = @ExecuteInternal!
-			if (succeeded)
-				@BuildResult2(polytree)
-
-			@DisposeAllPolyPts!
-			@m_ExecuteLocked = false
-
-			return polytree
-
-		elseif alen == 2 and not ispolytree -- function (clipType, solution)
-			clipType = a[1]
-			solution = a[2]
-			return @Execute(clipType, solution, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd)
-
-		elseif alen == 2 and ispolytree -- function (clipType, polytree)
-			clipType = a[1]
-			polytree = a[2]
-			return @Execute(clipType, polytree, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd)
+		@DisposeAllPolyPts!
+		@m_ExecuteLocked = false
 
 	FixHoleLinkage: (outRec) =>
 		--skip if an outermost polygon or
@@ -1912,9 +1407,6 @@ class Clipper extends ClipperBase
 		j.OutPt2 = Op2
 		j.OffPt.X = OffPt.X
 		j.OffPt.Y = OffPt.Y
-		if (ClipperLib.use_xyz)
-			j.OffPt.Z = OffPt.Z
-
 		table.insert(@m_Joins, j)
 
 	AddGhostJoin: (Op, OffPt) =>
@@ -1922,24 +1414,7 @@ class Clipper extends ClipperBase
 		j.OutPt1 = Op
 		j.OffPt.X = OffPt.X
 		j.OffPt.Y = OffPt.Y
-		if (ClipperLib.use_xyz)
-			j.OffPt.Z = OffPt.Z
 		table.insert(@m_GhostJoins, j)
-
-	SetZ: (pt, e1, e2) =>
-		if (@ZFillFunction != nil)
-			if (pt.Z != 0 or @ZFillFunction == nil)
-				return
-			elseif (ClipperLib.Point.op_Equality(pt, e1.Bot))
-				pt.Z = e1.Bot.Z
-			elseif (ClipperLib.Point.op_Equality(pt, e1.Top))
-				pt.Z = e1.Top.Z
-			elseif (ClipperLib.Point.op_Equality(pt, e2.Bot))
-				pt.Z = e2.Bot.Z
-			elseif (ClipperLib.Point.op_Equality(pt, e2.Top))
-				pt.Z = e2.Top.Z
-			else
-				@ZFillFunction(e1.Bot, e1.Top, e2.Bot, e2.Top, pt)
 
 	InsertLocalMinimaIntoAEL: (botY) =>
 		lm = {}
@@ -2001,19 +1476,12 @@ class Clipper extends ClipperBase
 					if (@HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
 						@AddJoin(j.OutPt1, Op1, j.OffPt)
 
-			--Temporary
-			if (lb.OutIdx >= 0 and lb.PrevInAEL != nil and lb.PrevInAEL.Curr.X == lb.Bot.X and lb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.OldSlopesEqual5(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, @m_UseFullRange) and lb.WindDelta != 0 and lb.PrevInAEL.WindDelta != 0)
-			--if (lb.OutIdx >= 0 and lb.PrevInAEL != nil and lb.PrevInAEL.Curr.X == lb.Bot.X and lb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.SlopesEqual5(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top) and lb.WindDelta != 0 and lb.PrevInAEL.WindDelta != 0)
-
+			if (lb.OutIdx >= 0 and lb.PrevInAEL != nil and lb.PrevInAEL.Curr.X == lb.Bot.X and lb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.SlopesEqual(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top) and lb.WindDelta != 0 and lb.PrevInAEL.WindDelta != 0)
 				Op2 = @AddOutPt(lb.PrevInAEL, lb.Bot)
 				@AddJoin(Op1, Op2, lb.Top)
 
 			if (lb.NextInAEL != rb)
-
-				--Temporary
-				if (rb.OutIdx >= 0 and rb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.OldSlopesEqual5(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, @m_UseFullRange) and rb.WindDelta != 0 and rb.PrevInAEL.WindDelta != 0)
-				--if (rb.OutIdx >= 0 and rb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.SlopesEqual5(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top) and rb.WindDelta != 0 and rb.PrevInAEL.WindDelta != 0)
-
+				if (rb.OutIdx >= 0 and rb.PrevInAEL.OutIdx >= 0 and ClipperLib.ClipperBase.SlopesEqual(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top) and rb.WindDelta != 0 and rb.PrevInAEL.WindDelta != 0)
 					Op2 = @AddOutPt(rb.PrevInAEL, rb.Bot)
 					@AddJoin(Op1, Op2, rb.Top)
 
@@ -2445,10 +1913,7 @@ class Clipper extends ClipperBase
 			xPrev = ClipperLib.Clipper.TopX(prevE, pt.Y)
 			xE = ClipperLib.Clipper.TopX(e, pt.Y)
 
-			--Temporary
-			if ((xPrev == xE) and (e.WindDelta != 0) and (prevE.WindDelta != 0) and ClipperLib.ClipperBase.OldSlopesEqual5(Point2(xPrev, pt.Y), prevE.Top, Point2(xE, pt.Y), e.Top, @m_UseFullRange))
-			--if ((xPrev == xE) and (e.WindDelta != 0) and (prevE.WindDelta != 0) and ClipperLib.ClipperBase.SlopesEqual5(Point(xPrev, pt.Y), prevE.Top, Point(xE, pt.Y), e.Top))
-
+			if ((xPrev == xE) and (e.WindDelta != 0) and (prevE.WindDelta != 0) and ClipperLib.ClipperBase.SlopesEqual(Point(xPrev, pt.Y), prevE.Top, Point(xE, pt.Y), e.Top))
 				outPt = @AddOutPt(prevE, pt)
 				@AddJoin(result, outPt, e.Top)
 
@@ -2461,17 +1926,15 @@ class Clipper extends ClipperBase
 			newOp = OutPt!
 			outRec.Pts = newOp
 			newOp.Idx = outRec.Idx
-			--newOp.Pt = pt
+
 			newOp.Pt.X = pt.X
 			newOp.Pt.Y = pt.Y
-			if (ClipperLib.use_xyz)
-				newOp.Pt.Z = pt.Z
+
 			newOp.Next = newOp
 			newOp.Prev = newOp
 			if (not outRec.IsOpen)
 				@SetHoleState(e, outRec)
 			e.OutIdx = outRec.Idx
-			--nb: do this after SetZ !
 			return newOp
 
 		else
@@ -2486,11 +1949,10 @@ class Clipper extends ClipperBase
 				return op.Prev
 			newOp = OutPt!
 			newOp.Idx = outRec.Idx
-			--newOp.Pt = pt
+
 			newOp.Pt.X = pt.X
 			newOp.Pt.Y = pt.Y
-			if (ClipperLib.use_xyz)
-				newOp.Pt.Z = pt.Z
+
 			newOp.Next = op
 			newOp.Prev = op.Prev
 			newOp.Prev.Next = newOp
@@ -2510,17 +1972,13 @@ class Clipper extends ClipperBase
 			return outRec.Pts.Prev
 
 	SwapPoints: (pt1, pt2) =>
-		tmp = Point1(pt1.Value)
+		tmp = Point(pt1.Value)
 
 		pt1.Value.X = pt2.Value.X
 		pt1.Value.Y = pt2.Value.Y
-		if (ClipperLib.use_xyz)
-			pt1.Value.Z = pt2.Value.Z
 
 		pt2.Value.X = tmp.X
 		pt2.Value.Y = tmp.Y
-		if (ClipperLib.use_xyz)
-			pt2.Value.Z = tmp.Z
 
 	HorzSegmentsOverlap: (seg1a, seg1b, seg2a, seg2b) =>
 		tmp = nil
@@ -2775,9 +2233,6 @@ class Clipper extends ClipperBase
 		e1Contributing = (e1.OutIdx >= 0)
 		e2Contributing = (e2.OutIdx >= 0)
 
-		if (ClipperLib.use_xyz)
-			@SetZ(pt, e1, e2)
-
 		if (ClipperLib.use_lines)
 			--if either edge is on an OPEN path ...
 			if (e1.WindDelta == 0 or e2.WindDelta == 0)
@@ -3014,13 +2469,13 @@ class Clipper extends ClipperBase
 					if (dir == ClipperLib.Direction.dLeftToRight)
 						while (currMax != nil and currMax.X < e.Curr.X)
 							if (horzEdge.OutIdx >= 0 and not IsOpen)
-								@AddOutPt(horzEdge, Point2(currMax.X, horzEdge.Bot.Y))
+								@AddOutPt(horzEdge, Point(currMax.X, horzEdge.Bot.Y))
 							currMax = currMax.Next
 
 					else
 						while (currMax != nil and currMax.X > e.Curr.X)
 							if (horzEdge.OutIdx >= 0 and not IsOpen)
-								@AddOutPt(horzEdge, Point2(currMax.X, horzEdge.Bot.Y))
+								@AddOutPt(horzEdge, Point(currMax.X, horzEdge.Bot.Y))
 							currMax = currMax.Prev
 
 				if ((dir == ClipperLib.Direction.dLeftToRight and e.Curr.X > horzRight) or (dir == ClipperLib.Direction.dRightToLeft and e.Curr.X < horzLeft))
@@ -3032,12 +2487,6 @@ class Clipper extends ClipperBase
 					break
 
 				if (horzEdge.OutIdx >= 0 and not IsOpen) --note: may be done multiple times
-					if (ClipperLib.use_xyz)
-						if (dir == ClipperLib.Direction.dLeftToRight)
-							@SetZ(e.Curr, horzEdge, e)
-						else
-							@SetZ(e.Curr, e, horzEdge)
-
 					op1 = @AddOutPt(horzEdge, e.Curr)
 					eNextHorz = @m_SortedEdges
 					while (eNextHorz != nil)
@@ -3061,11 +2510,11 @@ class Clipper extends ClipperBase
 
 				if (dir == ClipperLib.Direction.dLeftToRight)
 
-					Pt = Point2(e.Curr.X, horzEdge.Curr.Y)
+					Pt = Point(e.Curr.X, horzEdge.Curr.Y)
 					@IntersectEdges(horzEdge, e, Pt)
 
 				else
-					Pt = Point2(e.Curr.X, horzEdge.Curr.Y)
+					Pt = Point(e.Curr.X, horzEdge.Curr.Y)
 					@IntersectEdges(e, horzEdge, Pt)
 
 				eNext = @GetNextInAEL(e, dir)
@@ -3116,17 +2565,11 @@ class Clipper extends ClipperBase
 				ePrev = horzEdge.PrevInAEL
 				eNext = horzEdge.NextInAEL
 
-				--Temporary
-				if (ePrev != nil and ePrev.Curr.X == horzEdge.Bot.X and ePrev.Curr.Y == horzEdge.Bot.Y and ePrev.WindDelta == 0 and (ePrev.OutIdx >= 0 and ePrev.Curr.Y > ePrev.Top.Y and ClipperLib.ClipperBase.OldSlopesEqual3(horzEdge, ePrev, @m_UseFullRange)))
-				--if (ePrev != nil and ePrev.Curr.X == horzEdge.Bot.X and ePrev.Curr.Y == horzEdge.Bot.Y and ePrev.WindDelta == 0 and (ePrev.OutIdx >= 0 and ePrev.Curr.Y > ePrev.Top.Y and ClipperLib.ClipperBase.SlopesEqual3(horzEdge, ePrev)))
-
+				if (ePrev != nil and ePrev.Curr.X == horzEdge.Bot.X and ePrev.Curr.Y == horzEdge.Bot.Y and ePrev.WindDelta == 0 and (ePrev.OutIdx >= 0 and ePrev.Curr.Y > ePrev.Top.Y and ClipperLib.ClipperBase.SlopesEqual(horzEdge, ePrev)))
 					op2 = @AddOutPt(ePrev, horzEdge.Bot)
 					@AddJoin(op1, op2, horzEdge.Top)
 
-				--Temporary
-				elseif (eNext != nil and eNext.Curr.X == horzEdge.Bot.X and eNext.Curr.Y == horzEdge.Bot.Y and eNext.WindDelta != 0 and eNext.OutIdx >= 0 and eNext.Curr.Y > eNext.Top.Y and ClipperLib.ClipperBase.OldSlopesEqual3(horzEdge, eNext, @m_UseFullRange))
-				--elseif (eNext != nil and eNext.Curr.X == horzEdge.Bot.X and eNext.Curr.Y == horzEdge.Bot.Y and eNext.WindDelta != 0 and eNext.OutIdx >= 0 and eNext.Curr.Y > eNext.Top.Y and ClipperLib.ClipperBase.SlopesEqual3(horzEdge, eNext))
-
+				elseif (eNext != nil and eNext.Curr.X == horzEdge.Bot.X and eNext.Curr.Y == horzEdge.Bot.Y and eNext.WindDelta != 0 and eNext.OutIdx >= 0 and eNext.Curr.Y > eNext.Top.Y and ClipperLib.ClipperBase.SlopesEqual(horzEdge, eNext))
 					op2 = @AddOutPt(eNext, horzEdge.Bot)
 					@AddJoin(op1, op2, horzEdge.Top)
 
@@ -3206,11 +2649,11 @@ class Clipper extends ClipperBase
 			e = @m_SortedEdges
 			while (e.NextInSEL != nil)
 				eNext = e.NextInSEL
-				pt = Point0!
+				pt = Point!
 				if (e.Curr.X > eNext.Curr.X)
 					@IntersectPoint(e, eNext, pt)
 					if (pt.Y < topY)
-						pt = Point2(ClipperLib.Clipper.TopX(e, topY), topY)
+						pt = Point(ClipperLib.Clipper.TopX(e, topY), topY)
 
 					newNode = IntersectNode!
 					newNode.Edge1 = e
@@ -3218,8 +2661,7 @@ class Clipper extends ClipperBase
 
 					newNode.Pt.X = pt.X
 					newNode.Pt.Y = pt.Y
-					if (ClipperLib.use_xyz)
-						newNode.Pt.Z = pt.Z
+
 					table.insert(@m_IntersectList, newNode)
 					@SwapPositionsInSEL(e, eNext)
 					isModified = true
@@ -3241,13 +2683,15 @@ class Clipper extends ClipperBase
 		--pre-condition: intersections are sorted bottom-most first.
 		--Now it's crucial that intersections are made only between adjacent edges,
 		--so to ensure this the order of intersections may need adjusting ...
-		--DA FARE @m_IntersectList.sort(@m_IntersectNodeComparer)
+
+		--table.sort(@m_IntersectList, @m_IntersectNodeComparer)
+		
 		@CopyAELToSEL!
 		cnt = #@m_IntersectList
 		for i = 1, cnt
 			if (not @EdgesAdjacent(@m_IntersectList[i]))
 				j = i + 1
-				while (j < cnt and not @EdgesAdjacent(@m_IntersectList[j])) -- j <= cnt???
+				while (j < cnt and not @EdgesAdjacent(@m_IntersectList[j]))
 					j += 1
 				if (j == cnt)
 					return false
@@ -3353,28 +2797,16 @@ class Clipper extends ClipperBase
 					if (e.OutIdx >= 0)
 						@AddOutPt(e, e.Bot)
 					@AddEdgeToSEL(e)
-
 				else
 					e.Curr.X = ClipperLib.Clipper.TopX(e, topY)
 					e.Curr.Y = topY
-
-				if (ClipperLib.use_xyz)
-					if (e.Top.Y == topY)
-						e.Curr.Z = e.Top.Z
-					elseif (e.Bot.Y == topY)
-						e.Curr.Z = e.Bot.Z
-					else
-						e.Curr.Z = 0
 
 				--When StrictlySimple and 'e' is being touched by another edge, then
 				--make sure both edges have a vertex here ...        
 				if (@StrictlySimple)
 					ePrev = e.PrevInAEL
 					if ((e.OutIdx >= 0) and (e.WindDelta != 0) and ePrev != nil and (ePrev.OutIdx >= 0) and (ePrev.Curr.X == e.Curr.X) and (ePrev.WindDelta != 0))
-						ip = Point1(e.Curr)
-
-						if (ClipperLib.use_xyz)
-							@SetZ(ip, ePrev, e)
+						ip = Point(e.Curr)
 
 						op = @AddOutPt(ePrev, ip)
 						op2 = @AddOutPt(e, ip)
@@ -3397,17 +2829,11 @@ class Clipper extends ClipperBase
 				ePrev = e.PrevInAEL
 				eNext = e.NextInAEL
 
-				--Temporary
-				if (ePrev != nil and ePrev.Curr.X == e.Bot.X and ePrev.Curr.Y == e.Bot.Y and op != nil and ePrev.OutIdx >= 0 and ePrev.Curr.Y == ePrev.Top.Y and ClipperLib.ClipperBase.OldSlopesEqual5(e.Curr, e.Top, ePrev.Curr, ePrev.Top, @m_UseFullRange) and (e.WindDelta != 0) and (ePrev.WindDelta != 0))
-				--if (ePrev != nil and ePrev.Curr.X == e.Bot.X and ePrev.Curr.Y == e.Bot.Y and op != nil and ePrev.OutIdx >= 0 and ePrev.Curr.Y == ePrev.Top.Y and ClipperLib.ClipperBase.SlopesEqual5(e.Curr, e.Top, ePrev.Curr, ePrev.Top) and (e.WindDelta != 0) and (ePrev.WindDelta != 0))
-
+				if (ePrev != nil and ePrev.Curr.X == e.Bot.X and ePrev.Curr.Y == e.Bot.Y and op != nil and ePrev.OutIdx >= 0 and ePrev.Curr.Y == ePrev.Top.Y and ClipperLib.ClipperBase.SlopesEqual(e.Curr, e.Top, ePrev.Curr, ePrev.Top) and (e.WindDelta != 0) and (ePrev.WindDelta != 0))
 					op2 = @AddOutPt(ePrev2, e.Bot)
 					@AddJoin(op, op2, e.Top)
 
-				--Temporary
-				elseif (eNext != nil and eNext.Curr.X == e.Bot.X and eNext.Curr.Y == e.Bot.Y and op != nil and eNext.OutIdx >= 0 and eNext.Curr.Y == eNext.Top.Y and ClipperLib.ClipperBase.OldSlopesEqual5(e.Curr, e.Top, eNext.Curr, eNext.Top, @m_UseFullRange) and (e.WindDelta != 0) and (eNext.WindDelta != 0))
-				--elseif (eNext != nil and eNext.Curr.X == e.Bot.X and eNext.Curr.Y == e.Bot.Y and op != nil and eNext.OutIdx >= 0 and eNext.Curr.Y == eNext.Top.Y and ClipperLib.ClipperBase.SlopesEqual5(e.Curr, e.Top, eNext.Curr, eNext.Top) and (e.WindDelta != 0) and (eNext.WindDelta != 0))
-
+				elseif (eNext != nil and eNext.Curr.X == e.Bot.X and eNext.Curr.Y == e.Bot.Y and op != nil and eNext.OutIdx >= 0 and eNext.Curr.Y == eNext.Top.Y and ClipperLib.ClipperBase.SlopesEqual(e.Curr, e.Top, eNext.Curr, eNext.Top) and (e.WindDelta != 0) and (eNext.WindDelta != 0))
 					op2 = @AddOutPt(eNext, e.Bot)
 					@AddJoin(op, op2, e.Top)
 
@@ -3482,38 +2908,7 @@ class Clipper extends ClipperBase
 				p = p.Prev
 			table.insert(polyg, pg)
 
-		return polyg
-
-	BuildResult2: (polytree) =>
-		--add each output polygon/contour to polytree ...
-		for i = 1, #@m_PolyOuts
-			outRec = @m_PolyOuts[i]
-			cnt = @PointCount(outRec.Pts)
-			if ((outRec.IsOpen and cnt < 2) or (not outRec.IsOpen and cnt < 3))
-				continue
-			@FixHoleLinkage(outRec)
-			pn = PolyNode!
-			table.insert(polytree.m_AllPolys, pn)
-			outRec.PolyNode = pn
-			pn.m_polygon.length = cnt
-			op = outRec.Pts.Prev
-			for j = 1, cnt
-				pn.m_polygon[j] = op.Pt
-				op = op.Prev
-
-		--fixup PolyNode links etc ...
-		--polytree.m_Childs.set_Capacity(this.m_PolyOuts.length);
-		for i = 1, #@m_PolyOuts
-			outRec = @m_PolyOuts[i]
-			if (outRec.PolyNode == nil)
-				continue
-			elseif (outRec.IsOpen)
-				outRec.PolyNode.IsOpen = true
-				polytree\AddChild(outRec.PolyNode)
-			elseif (outRec.FirstLeft != nil and outRec.FirstLeft.PolyNode != nil)
-				outRec.FirstLeft.PolyNode\AddChild(outRec.PolyNode)
-			else
-				polytree\AddChild(outRec.PolyNode)
+		@FinalSolution = polyg
 
 	FixupOutPolyline: (outRec) =>
 		pp = outRec.Pts
@@ -3544,11 +2939,7 @@ class Clipper extends ClipperBase
 				return
 
 			--test for duplicate points and collinear edges ...
-
-			--Temporary
-			if ((ClipperLib.Point.op_Equality(pp.Pt, pp.Next.Pt)) or (ClipperLib.Point.op_Equality(pp.Pt, pp.Prev.Pt)) or (ClipperLib.ClipperBase.OldSlopesEqual4(pp.Prev.Pt, pp.Pt, pp.Next.Pt, @m_UseFullRange) and (not preserveCol or not @Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
-			--if ((ClipperLib.Point.op_Equality(pp.Pt, pp.Next.Pt)) or (ClipperLib.Point.op_Equality(pp.Pt, pp.Prev.Pt)) or (ClipperLib.ClipperBase.SlopesEqual4(pp.Prev.Pt, pp.Pt, pp.Next.Pt) and (not preserveCol or not @Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
-
+			if ((ClipperLib.Point.op_Equality(pp.Pt, pp.Next.Pt)) or (ClipperLib.Point.op_Equality(pp.Pt, pp.Prev.Pt)) or (ClipperLib.ClipperBase.SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt) and (not preserveCol or not @Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
 				lastOK = nil
 				pp.Prev.Next = pp.Next
 				pp.Next.Prev = pp.Prev
@@ -3564,12 +2955,11 @@ class Clipper extends ClipperBase
 
 	DupOutPt: (outPt, InsertAfter) =>
 		result = OutPt!
-		--result.Pt = outPt.Pt;
+
 		result.Pt.X = outPt.Pt.X
 		result.Pt.Y = outPt.Pt.Y
-		if (ClipperLib.use_xyz)
-			result.Pt.Z = outPt.Pt.Z
 		result.Idx = outPt.Idx
+
 		if (InsertAfter)
 			result.Next = outPt.Next
 			result.Prev = outPt
@@ -3632,8 +3022,7 @@ class Clipper extends ClipperBase
 				op1 = op1b
 				op1.Pt.X = Pt.X
 				op1.Pt.Y = Pt.Y
-				if (ClipperLib.use_xyz)
-					op1.Pt.Z = Pt.Z
+
 				op1b = @DupOutPt(op1, not DiscardLeft)
 		else
 			while (op1.Next.Pt.X >= Pt.X and op1.Next.Pt.X <= op1.Pt.X and op1.Next.Pt.Y == Pt.Y)
@@ -3645,8 +3034,7 @@ class Clipper extends ClipperBase
 				op1 = op1b
 				op1.Pt.X = Pt.X
 				op1.Pt.Y = Pt.Y
-				if (ClipperLib.use_xyz)
-					op1.Pt.Z = Pt.Z
+
 				op1b = @DupOutPt(op1, DiscardLeft)
 
 		if (Dir2 == ClipperLib.Direction.dLeftToRight)
@@ -3659,8 +3047,7 @@ class Clipper extends ClipperBase
 				op2 = op2b
 				op2.Pt.X = Pt.X
 				op2.Pt.Y = Pt.Y
-				if (ClipperLib.use_xyz)
-					op2.Pt.Z = Pt.Z
+
 				op2b = @DupOutPt(op2, not DiscardLeft)
 		else
 			while (op2.Next.Pt.X >= Pt.X and op2.Next.Pt.X <= op2.Pt.X and op2.Next.Pt.Y == Pt.Y)
@@ -3672,8 +3059,7 @@ class Clipper extends ClipperBase
 				op2 = op2b
 				op2.Pt.X = Pt.X
 				op2.Pt.Y = Pt.Y
-				if (ClipperLib.use_xyz)
-					op2.Pt.Z = Pt.Z
+
 				op2b = @DupOutPt(op2, DiscardLeft)
 
 		if ((Dir1 == ClipperLib.Direction.dLeftToRight) == DiscardLeft)
@@ -3773,35 +3159,27 @@ class Clipper extends ClipperBase
 			--DiscardLeftSide: when overlapping edges are joined, a spike will created
 			--which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
 			--on the discard Side as either may still be needed for other joins ...
-			Pt = Point0!
+			Pt = Point!
 			DiscardLeftSide = nil
 			if (op1.Pt.X >= Left and op1.Pt.X <= Right)
 				Pt.X = op1.Pt.X
 				Pt.Y = op1.Pt.Y
-				if (ClipperLib.use_xyz)
-					Pt.Z = op1.Pt.Z
 				DiscardLeftSide = (op1.Pt.X > op1b.Pt.X)
 
 			elseif (op2.Pt.X >= Left and op2.Pt.X <= Right)
 				Pt.X = op2.Pt.X
 				Pt.Y = op2.Pt.Y
-				if (ClipperLib.use_xyz)
-					Pt.Z = op2.Pt.Z
 				DiscardLeftSide = (op2.Pt.X > op2b.Pt.X)
 
 			elseif (op1b.Pt.X >= Left and op1b.Pt.X <= Right)
 				--Pt = op1b.Pt;
 				Pt.X = op1b.Pt.X
 				Pt.Y = op1b.Pt.Y
-				if (ClipperLib.use_xyz)
-					Pt.Z = op1b.Pt.Z
 				DiscardLeftSide = op1b.Pt.X > op1.Pt.X
 
 			else
 				Pt.X = op2b.Pt.X
 				Pt.Y = op2b.Pt.Y
-				if (ClipperLib.use_xyz)
-					Pt.Z = op2b.Pt.Z
 				DiscardLeftSide = (op2b.Pt.X > op2.Pt.X)
 
 			j.OutPt1 = op1
@@ -3817,18 +3195,14 @@ class Clipper extends ClipperBase
 			while ((ClipperLib.Point.op_Equality(op1b.Pt, op1.Pt)) and (op1b != op1))
 				op1b = op1b.Next
 
-			--Temporary
-			Reverse1 = op1b.Pt.Y > op1.Pt.Y or not ClipperLib.ClipperBase.OldSlopesEqual4(op1.Pt, op1b.Pt, j.OffPt, @m_UseFullRange)
-			--Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) or not ClipperLib.ClipperBase.SlopesEqual4(op1.Pt, op1b.Pt, j.OffPt))
+			Reverse1 = op1b.Pt.Y > op1.Pt.Y or not ClipperLib.ClipperBase.SlopesEqual(op1.Pt, op1b.Pt, j.OffPt)
 
 			if (Reverse1)
 				op1b = op1.Prev
 				while ((ClipperLib.Point.op_Equality(op1b.Pt, op1.Pt)) and (op1b != op1))
 					op1b = op1b.Prev
 
-				--Temporary
-				if ((op1b.Pt.Y > op1.Pt.Y) or not ClipperLib.ClipperBase.OldSlopesEqual4(op1.Pt, op1b.Pt, j.OffPt, @m_UseFullRange))
-				--if ((op1b.Pt.Y > op1.Pt.Y) or not ClipperLib.ClipperBase.SlopesEqual4(op1.Pt, op1b.Pt, j.OffPt))
+				if ((op1b.Pt.Y > op1.Pt.Y) or not ClipperLib.ClipperBase.SlopesEqual(op1.Pt, op1b.Pt, j.OffPt))
 
 					return false
 
@@ -3836,19 +3210,14 @@ class Clipper extends ClipperBase
 			while ((ClipperLib.Point.op_Equality(op2b.Pt, op2.Pt)) and (op2b != op2))
 				op2b = op2b.Next
 
-			--Temporary
-			Reverse2 = op2b.Pt.Y > op2.Pt.Y or not ClipperLib.ClipperBase.OldSlopesEqual4(op2.Pt, op2b.Pt, j.OffPt, @m_UseFullRange)
-			--Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) or not ClipperLib.ClipperBase.SlopesEqual4(op2.Pt, op2b.Pt, j.OffPt))
+			Reverse2 = op2b.Pt.Y > op2.Pt.Y or not ClipperLib.ClipperBase.SlopesEqual(op2.Pt, op2b.Pt, j.OffPt)
 
 			if (Reverse2)
 				op2b = op2.Prev
 				while ((ClipperLib.Point.op_Equality(op2b.Pt, op2.Pt)) and (op2b != op2))
 					op2b = op2b.Prev
 
-				--Temporary
-				if ((op2b.Pt.Y > op2.Pt.Y) or not ClipperLib.ClipperBase.OldSlopesEqual4(op2.Pt, op2b.Pt, j.OffPt, @m_UseFullRange))
-				--if ((op2b.Pt.Y > op2.Pt.Y) or not ClipperLib.ClipperBase.SlopesEqual4(op2.Pt, op2b.Pt, j.OffPt))
-
+				if ((op2b.Pt.Y > op2.Pt.Y) or not ClipperLib.ClipperBase.SlopesEqual(op2.Pt, op2b.Pt, j.OffPt))
 					return false
 
 			if ((op1b == op1) or (op2b == op2) or (op1b == op2b) or ((outRec1 == outRec2) and (Reverse1 == Reverse2)))
@@ -4083,9 +3452,10 @@ class Clipper extends ClipperBase
 				break
 
 	DoSimplePolygons: =>
-		i = 0
-		while (i < #@m_PolyOuts)
-			outrec = @m_PolyOuts[i + 1]
+		i = 1
+		while (i <= #@m_PolyOuts)
+			outrec = @m_PolyOuts[i]
+			i += 1
 			op = outrec.Pts
 			if (op == nil or outrec.IsOpen)
 				continue
@@ -4108,25 +3478,16 @@ class Clipper extends ClipperBase
 							--OutRec2 is contained by OutRec1 ...
 							outrec2.IsHole = not outrec.IsHole
 							outrec2.FirstLeft = outrec
-							if (@m_UsingPolyTree)
-								@FixupFirstLefts2(outrec2, outrec)
-
 						elseif (@Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
 							--OutRec1 is contained by OutRec2 ...
 							outrec2.IsHole = outrec.IsHole
 							outrec.IsHole = not outrec2.IsHole
 							outrec2.FirstLeft = outrec.FirstLeft
 							outrec.FirstLeft = outrec2
-							if (@m_UsingPolyTree)
-								@FixupFirstLefts2(outrec, outrec2)
-
 						else
 							--the 2 polygons are separate ...
 							outrec2.IsHole = outrec.IsHole
 							outrec2.FirstLeft = outrec.FirstLeft
-							if (@m_UsingPolyTree)
-								@FixupFirstLefts1(outrec, outrec2)
-
 						op2 = op
 						--ie get ready for the next iteration
 					op2 = op2.Next
@@ -4144,7 +3505,7 @@ class Clipper extends ClipperBase
 			a = a + (op.Prev.Pt.X + op.Pt.X) * (op.Prev.Pt.Y - op.Pt.Y)
 			op = op.Next
 			
-			if(op != opFirst) -- and typeof op !== 'undefined')
+			if(op == opFirst) -- and typeof op !== 'undefined')
 				break
 
 		return a * 0.5
@@ -4152,15 +3513,22 @@ class Clipper extends ClipperBase
 	AreaS1: (outRec) =>
 		return @Area(outRec.Pts)
 
+ClipperLib.Clipper.SimplifyPolygons = (polys, fillType) ->
+	c = Clipper!
+	c.StrictlySimple = true
+	c\AddPaths(polys, ClipperLib.PolyType.ptSubject, true)
+	c\Execute(ClipperLib.ClipType.ctUnion, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero)
+	return c.FinalSolution
+
 ClipperLib.ClipperOffset.GetUnitNormal = (pt1, pt2) ->
+	if pt2.X == pt1.X and pt2.Y == pt1.Y
+		return Point(0, 0)
 	dx = (pt2.X - pt1.X)
 	dy = (pt2.Y - pt1.Y)
-	if ((dx == 0) and (dy == 0))
-		return DoublePoint2(0, 0)
-	f = 1 / math.sqrt(dx * dx + dy * dy)
+	f = 1 / math.sqrt(dx*dx + dy*dy)
 	dx *= f
 	dy *= f
-	return DoublePoint2(dy, -dx)
+	return Point(dy, -dx)
 
 class ClipperOffset
 	new: (miterLimit, arcTolerance) =>
@@ -4174,7 +3542,7 @@ class ClipperOffset
 		@m_cos = 0
 		@m_miterLim = 0
 		@m_StepsPerRad = 0
-		@m_lowest = Point0!
+		@m_lowest = Point!
 		@m_polyNodes = PolyNode!
 		@MiterLimit = miterLimit or 2
 		@ArcTolerance = arcTolerance or ClipperLib.ClipperOffset.def_arc_tolerance
@@ -4214,11 +3582,11 @@ class ClipperOffset
 		if (endType != ClipperLib.EndType.etClosedPolygon)
 			return
 		if (@m_lowest.X < 0)
-			@m_lowest = Point2(@m_polyNodes\ChildCount(), k)
+			@m_lowest = Point(@m_polyNodes\ChildCount(), k)
 		else
 			ip = @m_polyNodes\Childs()[@m_lowest.X].m_polygon[@m_lowest.Y]
 			if (newNode.m_polygon[k].Y > ip.Y or (newNode.m_polygon[k].Y == ip.Y and newNode.m_polygon[k].X < ip.X))
-				@m_lowest = Point2(@m_polyNodes\ChildCount(), k)
+				@m_lowest = Point(@m_polyNodes\ChildCount(), k)
 
 	AddPaths: (paths, joinType, endType) =>
 		for i = 1, #paths
@@ -4228,16 +3596,21 @@ class ClipperOffset
 		--fixup orientations of all closed paths if the orientation of the
 		--closed path with the lowermost vertex is wrong ...
 		if (@m_lowest.X >= 0 and not ClipperLib.Clipper.Orientation(@m_polyNodes\Childs()[@m_lowest.X].m_polygon))
-
 			for i = 1, @m_polyNodes\ChildCount()
 				node = @m_polyNodes\Childs()[i]
 				if (node.m_endtype == ClipperLib.EndType.etClosedPolygon or (node.m_endtype == ClipperLib.EndType.etClosedLine and ClipperLib.Clipper.Orientation(node.m_polygon)))
-					ClipperLib.reverse(node.m_polygon)
+					tempNode = {}
+					for i = #node.m_polygon, 1, -1
+						table.insert(tempNode, node.m_polygon[i])
+					node.m_polygon = tempNode
 		else
 			for i = 1, @m_polyNodes\ChildCount()
 				node = @m_polyNodes\Childs()[i]
 				if (node.m_endtype == ClipperLib.EndType.etClosedLine and not ClipperLib.Clipper.Orientation(node.m_polygon))
-					ClipperLib.reverse(node.m_polygon)
+					tempNode = {}
+					for i = #node.m_polygon, 1, -1
+						table.insert(tempNode, node.m_polygon[i])
+					node.m_polygon = tempNode
 
 	DoOffset: (delta) =>
 		@m_destPolys = {}
@@ -4285,7 +3658,7 @@ class ClipperOffset
 					X = 1
 					Y = 0
 					for j = 1, steps -- partire da 2?
-						table.insert(@m_destPoly, Point2(@m_srcPoly[1].X + X * delta, @m_srcPoly[1].Y + Y * delta))
+						table.insert(@m_destPoly, Point(@m_srcPoly[1].X + X * delta, @m_srcPoly[1].Y + Y * delta))
 						X2 = X
 						X = X * @m_cos - @m_sin * Y
 						Y = X2 * @m_sin + Y * @m_cos
@@ -4294,7 +3667,7 @@ class ClipperOffset
 					X = -1
 					Y = -1
 					for j = 1, 4
-						table.insert(@m_destPoly, Point2(@m_srcPoly[1].X + X * delta, @m_srcPoly[1].Y + Y * delta))	
+						table.insert(@m_destPoly, Point(@m_srcPoly[1].X + X * delta, @m_srcPoly[1].Y + Y * delta))	
 						if (X < 0)
 							X = 1
 						elseif (Y < 0)
@@ -4314,7 +3687,7 @@ class ClipperOffset
 			if (node.m_endtype == ClipperLib.EndType.etClosedLine or node.m_endtype == ClipperLib.EndType.etClosedPolygon)
 				table.insert(@m_normals, ClipperLib.ClipperOffset.GetUnitNormal(@m_srcPoly[len], @m_srcPoly[1]))
 			else
-				table.insert(@m_normals, DoublePoint1(@m_normals[len - 1]))
+				table.insert(@m_normals, Point(@m_normals[len - 1]))
 
 			if (node.m_endtype == ClipperLib.EndType.etClosedPolygon)
 				k = len
@@ -4332,8 +3705,8 @@ class ClipperOffset
 				--re-build m_normals ...
 				n = @m_normals[len]
 				for j = len, 2, -1
-					@m_normals[j] = DoublePoint2(-@m_normals[j - 1].X, -@m_normals[j - 1].Y)
-				@m_normals[1] = DoublePoint2(-n.X, -n.Y)
+					@m_normals[j] = Point(-@m_normals[j - 1].X, -@m_normals[j - 1].Y)
+				@m_normals[1] = Point(-n.X, -n.Y)
 				k = 1
 				for j = len, 1, -1
 					k = @OffsetPoint(j, k, node.m_jointype)
@@ -4346,15 +3719,15 @@ class ClipperOffset
 				pt1 = nil
 				if (node.m_endtype == ClipperLib.EndType.etOpenButt)
 					j = len
-					pt1 = Point2(@m_srcPoly[j].X + @m_normals[j].X * delta, @m_srcPoly[j].Y + @m_normals[j].Y * delta)
+					pt1 = Point(@m_srcPoly[j].X + @m_normals[j].X * delta, @m_srcPoly[j].Y + @m_normals[j].Y * delta)
 					table.insert(@m_destPoly, pt1)
-					pt1 = Point2(@m_srcPoly[j].X - @m_normals[j].X * delta, @m_srcPoly[j].Y - @m_normals[j].Y * delta)
+					pt1 = Point(@m_srcPoly[j].X - @m_normals[j].X * delta, @m_srcPoly[j].Y - @m_normals[j].Y * delta)
 					table.insert(@m_destPoly, pt1)
 				else
 					j = len
 					k = len - 1
 					@m_sinA = 0
-					@m_normals[j] = DoublePoint2(-@m_normals[j].X, -@m_normals[j].Y)
+					@m_normals[j] = Point(-@m_normals[j].X, -@m_normals[j].Y)
 					if (node.m_endtype == ClipperLib.EndType.etOpenSquare)
 						@DoSquare(j, k)
 					else
@@ -4362,15 +3735,15 @@ class ClipperOffset
 
 				--re-build m_normals ...
 				for j = len, 2, -1
-					@m_normals[j] = DoublePoint2(-@m_normals[j - 1].X, -@m_normals[j - 1].Y)
-				@m_normals[1] = DoublePoint2(-@m_normals[2].X, -@m_normals[2].Y)
+					@m_normals[j] = Point(-@m_normals[j - 1].X, -@m_normals[j - 1].Y)
+				@m_normals[1] = Point(-@m_normals[2].X, -@m_normals[2].Y)
 				k = len
 				for j = k - 1, 2, -1
 					k = @OffsetPoint(j, k, node.m_jointype)
 				if (node.m_endtype == ClipperLib.EndType.etOpenButt)
-					pt1 = Point2(@m_srcPoly[1].X - @m_normals[1].X * delta, @m_srcPoly[1].Y - @m_normals[1].Y * delta)
+					pt1 = Point(@m_srcPoly[1].X - @m_normals[1].X * delta, @m_srcPoly[1].Y - @m_normals[1].Y * delta)
 					table.insert(@m_destPoly, pt1)
-					pt1 = Point2(@m_srcPoly[1].X + @m_normals[1].X * delta, @m_srcPoly[1].Y + @m_normals[1].Y * delta)
+					pt1 = Point(@m_srcPoly[1].X + @m_normals[1].X * delta, @m_srcPoly[1].Y + @m_normals[1].Y * delta)
 					table.insert(@m_destPoly, pt1)
 				else
 					k = 1
@@ -4382,92 +3755,51 @@ class ClipperOffset
 
 				table.insert(@m_destPolys, @m_destPoly)
 
-	Execute: (...) =>
-		a = {...}
-		ispolytree = a[1].class_name == "PolyTree"
+	Execute: (delta) =>
 		test = nil
-		if (not ispolytree) -- function (solution, delta)
-			solution = a[1]
-			delta = a[2]
-			ClipperLib.Clear(solution)
-			@FixOrientations!
-			@DoOffset(delta)
-			-- now clean up 'corners' ...
-			clpr = Clipper!
-			clpr\AddPaths(@m_destPolys, ClipperLib.PolyType.ptSubject, true)
-			if (delta > 0)
-				succeded, test = clpr\Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive)
-			else
-				r = ClipperLib.Clipper.GetBounds(@m_destPolys)
-				outer = Path!
-				table.insert(outer, Point2(r.left - 10, r.bottom + 10))
-				table.insert(outer, Point2(r.right + 10, r.bottom + 10))
-				table.insert(outer, Point2(r.right + 10, r.top - 10))
-				table.insert(outer, Point2(r.left - 10, r.top - 10))
-				clpr\AddPath(outer, ClipperLib.PolyType.ptSubject, true)
-				clpr.ReverseSolution = true
-				succeded, test = clpr\Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftNegative, ClipperLib.PolyFillType.pftNegative)
-				if (#test > 1)
-					table.remove(test, 1)
 
-		else -- function (polytree, delta)
-			solution = a[1]
-			delta = a[2]
-			ClipperLib.Clear(solution)
-			@FixOrientations!
-			@DoOffset(delta)
-			--now clean up 'corners' ...
-			clpr = Clipper!
-			clpr\AddPaths(@m_destPolys, ClipperLib.PolyType.ptSubject, true)
-			if (delta > 0)
-				clpr\Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive)
-			else
-				r = ClipperLib.Clipper.GetBounds(@m_destPolys)
-				outer = Path!
-				table.insert(outer, Point2(r.left - 10, r.bottom + 10))
-				table.insert(outer, Point2(r.right + 10, r.bottom + 10))
-				table.insert(outer, Point2(r.right + 10, r.top - 10))
-				table.insert(outer, Point2(r.left - 10, r.top - 10))
-				clpr\AddPath(outer, ClipperLib.PolyType.ptSubject, true)
-				clpr.ReverseSolution = true
-				clpr\Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftNegative, ClipperLib.PolyFillType.pftNegative)
-				--remove the outer PolyNode rectangle ...
-				if (solution.ChildCount() == 1 and solution.Childs()[1].ChildCount() > 0)
-					outerNode = solution.Childs()[1]
-					--solution.Childs.set_Capacity(outerNode.ChildCount);
-					solution.Childs()[1] = outerNode.Childs()[1]
-					solution.Childs()[1].m_Parent = solution
-					for i = 1, outerNode.ChildCount()
-						solution.AddChild(outerNode.Childs()[i])
-				else
-					ClipperLib.Clear(solution)
-		return test
+		@FixOrientations!
+		@DoOffset(delta)
+		-- now clean up 'corners' ...
+		clpr = Clipper!
+		clpr\AddPaths(@m_destPolys, ClipperLib.PolyType.ptSubject, true)
+		if (delta > 0)
+			clpr\Execute(ClipperLib.ClipType.ctUnion, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive)
+		else
+			r = ClipperLib.Clipper.GetBounds(@m_destPolys)
+			outer = Path!
+			table.insert(outer, Point(r.left - 10, r.bottom + 10))
+			table.insert(outer, Point(r.right + 10, r.bottom + 10))
+			table.insert(outer, Point(r.right + 10, r.top - 10))
+			table.insert(outer, Point(r.left - 10, r.top - 10))
+			clpr\AddPath(outer, ClipperLib.PolyType.ptSubject, true)
+			clpr.ReverseSolution = true
+			clpr\Execute(ClipperLib.ClipType.ctUnion, ClipperLib.PolyFillType.pftNegative, ClipperLib.PolyFillType.pftNegative)
+			
+			if (#clpr.FinalSolution > 1)
+				table.remove(clpr.FinalSolution, 1)
+
+		return clpr.FinalSolution
 
 	OffsetPoint: (j, k, jointype) =>
 		--cross product ...
 		@m_sinA = (@m_normals[k].X * @m_normals[j].Y) - (@m_normals[j].X * @m_normals[k].Y)
 		
-
-		--Temporary
 		if (math.abs(@m_sinA * @m_delta) < 1.0)
 			--dot product ...
 			cosA = (@m_normals[k].X * @m_normals[j].X + @m_normals[j].Y * @m_normals[k].Y)
 			if (cosA > 0) -- angle ==> 0 degrees
-				table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + @m_normals[k].X * @m_delta, @m_srcPoly[j].Y + @m_normals[k].Y * @m_delta))
+				table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[k].X * @m_delta, @m_srcPoly[j].Y + @m_normals[k].Y * @m_delta))
 				return k
-
-
-		--if (@m_sinA == 0)
-			--return k
 
 		elseif (@m_sinA > 1)
 			@m_sinA = 1.0
 		elseif (@m_sinA < -1)
 			@m_sinA = -1.0
 		if (@m_sinA * @m_delta < 0)
-			table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + @m_normals[k].X * @m_delta, @m_srcPoly[j].Y + @m_normals[k].Y * @m_delta))
-			table.insert(@m_destPoly, Point1(@m_srcPoly[j]))
-			table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + @m_normals[j].X * @m_delta, @m_srcPoly[j].Y + @m_normals[j].Y * @m_delta))
+			table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[k].X * @m_delta, @m_srcPoly[j].Y + @m_normals[k].Y * @m_delta))
+			table.insert(@m_destPoly, Point(@m_srcPoly[j]))
+			table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[j].X * @m_delta, @m_srcPoly[j].Y + @m_normals[j].Y * @m_delta))
 
 		else
 			switch (jointype)
@@ -4489,28 +3821,28 @@ class ClipperOffset
 
 	DoSquare: (j, k) =>
 		dx = math.tan(math.atan2(@m_sinA, @m_normals[k].X * @m_normals[j].X + @m_normals[k].Y * @m_normals[j].Y) / 4)
-		table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + @m_delta * (@m_normals[k].X - @m_normals[k].Y * dx), @m_srcPoly[j].Y + @m_delta * (@m_normals[k].Y + @m_normals[k].X * dx)))
-		table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + @m_delta * (@m_normals[j].X + @m_normals[j].Y * dx), @m_srcPoly[j].Y + @m_delta * (@m_normals[j].Y - @m_normals[j].X * dx)))
+		table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_delta * (@m_normals[k].X - @m_normals[k].Y * dx), @m_srcPoly[j].Y + @m_delta * (@m_normals[k].Y + @m_normals[k].X * dx)))
+		table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_delta * (@m_normals[j].X + @m_normals[j].Y * dx), @m_srcPoly[j].Y + @m_delta * (@m_normals[j].Y - @m_normals[j].X * dx)))
 
 	DoMiter: (j, k, r) =>
 		q = @m_delta / r
-		table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + (@m_normals[k].X + @m_normals[j].X) * q, @m_srcPoly[j].Y + (@m_normals[k].Y + @m_normals[j].Y) * q))
+		table.insert(@m_destPoly, Point(@m_srcPoly[j].X + (@m_normals[k].X + @m_normals[j].X) * q, @m_srcPoly[j].Y + (@m_normals[k].Y + @m_normals[j].Y) * q))
 	
 	DoRound: (j, k) =>
 		a = math.atan2(@m_sinA, @m_normals[k].X * @m_normals[j].X + @m_normals[k].Y * @m_normals[j].Y)
 
-		steps = math.max(math.floor(@m_StepsPerRad * math.abs(a), 0))
+		steps = math.max(@m_StepsPerRad * math.abs(a), 1)
 
 		X = @m_normals[k].X
 		Y = @m_normals[k].Y
 		X2 = nil
-		for i = 1, steps
-			table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + X * @m_delta, @m_srcPoly[j].Y + Y * @m_delta))
+		for i = 1, steps + 1
+			table.insert(@m_destPoly, Point(@m_srcPoly[j].X + X * @m_delta, @m_srcPoly[j].Y + Y * @m_delta))
 			X2 = X
 			X = X * @m_cos - @m_sin * Y
 			Y = X2 * @m_sin + Y * @m_cos
 
-		table.insert(@m_destPoly, Point2(@m_srcPoly[j].X + @m_normals[j].X * @m_delta, @m_srcPoly[j].Y + @m_normals[j].Y * @m_delta))
+		table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[j].X * @m_delta, @m_srcPoly[j].Y + @m_normals[j].Y * @m_delta))
 
 --------------------------------------------------------------------------
 
@@ -4713,6 +4045,7 @@ GUI = {
 		{class: "label", label: "Subject FillType", x: 1, y: 1},
 		{class: "dropdown", name: "clipfilltype", value: "NonZero", items: {"NonZero", "EvenOdd"}, x: 0, y: 2},
 		{class: "label", label: "Clip FillType", x: 1, y: 2},
+		{class: "checkbox", label: "Multiline", name: "multiline", value: false, x: 0, y: 3, width: 1, height: 1},
 
 		{class: "label", label: "Offsetting", x: 0, y: 6},
 		{class: "floatedit", name: "delta", x: 1, y: 6, width: 1, height: 1, hint: "delta", value: 0},
@@ -4734,7 +4067,9 @@ GUI = {
 
 
 		{class: "label", label: "Gradient Step (2 min)", x: 6, y: 6},
-		{class: "floatedit", name: "gradientsize", x: 6, y: 7, width: 1, height: 1, hint: "Gradient size", value: 2}
+		{class: "floatedit", name: "gradientsize", x: 6, y: 7, width: 1, height: 1, hint: "Gradient size", value: 2},
+
+		{class: "label", label: "ver: " .. script_version, x: 7, y: 9}
 	},
 	help: {
 		{class: "textbox", x: 0, y: 0, width: 45, height: 15, value: Helptext}
@@ -4765,26 +4100,43 @@ Main = (sub, sel) ->
 				data.clip = Yutils.shape.move(data.clip, -data.pos.x, -data.pos.y)
 			
 			cpr = Clipper!
-			cpr\AddPaths(Aegihelp.AegiToClipper(data.shape), ClipperLib.PolyType.ptSubject, true)
-			cpr\AddPaths(Aegihelp.AegiToClipper(data.clip), ClipperLib.PolyType.ptClip, true)
-			solution_paths = Paths!
 
+			if res.multiline == false
+				cpr\AddPaths(Aegihelp.AegiToClipper(data.shape), ClipperLib.PolyType.ptSubject, true)
+				cpr\AddPaths(Aegihelp.AegiToClipper(data.clip), ClipperLib.PolyType.ptClip, true)
+			else
+				j = 1
+				for si2, li2 in ipairs(sel)
+					linez = sub[li2]
+					karaskel.preproc_line sub, meta, styles, linez
+					data2 = Aegihelp.GetLine(linez)
+					if j == 1
+						cpr\AddPaths(Aegihelp.AegiToClipper(data2.shape), ClipperLib.PolyType.ptSubject, true)
+						j = 0
+						continue
+					cpr\AddPaths(Aegihelp.AegiToClipper(data2.shape), ClipperLib.PolyType.ptClip, true)
+					linez.comment = true
+					sub[li2] = linez
+			
 			if res.pathfinder == "Union"
-				suc, solution_paths = cpr\Execute(ClipperLib.ClipType.ctUnion, solution_paths, ft1, ft2)
+				cpr\Execute(ClipperLib.ClipType.ctUnion, ft1, ft2)
 			if res.pathfinder == "Intersect"
-				suc, solution_paths = cpr\Execute(ClipperLib.ClipType.ctIntersection, solution_paths, ft1, ft2)
+				cpr\Execute(ClipperLib.ClipType.ctIntersection, ft1, ft2)
 			if res.pathfinder == "Difference"
-				suc, solution_paths = cpr\Execute(ClipperLib.ClipType.ctDifference, solution_paths, ft1, ft2)
+				cpr\Execute(ClipperLib.ClipType.ctDifference, ft1, ft2)
 			if res.pathfinder == "XOR"
-				suc, solution_paths = cpr\Execute(ClipperLib.ClipType.ctXor, solution_paths, ft1, ft2)
+				cpr\Execute(ClipperLib.ClipType.ctXor, ft1, ft2)
 
 			line.text = line.text\gsub("\\i?clip%b()", "")
-			solution_paths = Aegihelp.ClipperToAegi(solution_paths)
+			solution_paths = Aegihelp.ClipperToAegi(cpr.FinalSolution)
 			line.text = line.text\match("%b{}")
 			for i = 1, #solution_paths
 				line.text = line.text .. solution_paths[i]
 
 			sub[li] = line
+
+			if res.multiline break
+
 
 		if run == "Offsetting"
 			jt, et = nil
@@ -4800,10 +4152,11 @@ Main = (sub, sel) ->
 			elseif res.endtype == "ClosedLine"
 				et = ClipperLib.EndType.etClosedLine
 
-			solution = Paths!
+			paths = ClipperLib.Clipper.SimplifyPolygons(Aegihelp.AegiToClipper(data.shape), ClipperLib.Clipper.pftNonZero)
+
 			co = ClipperOffset(res.miterLimit, res.arcTolerance)
-			co\AddPaths(Aegihelp.AegiToClipper(data.shape), jt, et)
-			solution = co\Execute(solution, res.delta)
+			co\AddPaths(paths, jt, et)
+			solution = co\Execute(res.delta)
 
 			line.text = line.text\match("%b{}")
 			solution = Aegihelp.ClipperToAegi(solution)
@@ -4838,11 +4191,11 @@ Main = (sub, sel) ->
 				cpr = Clipper!
 				cpr\AddPaths(Aegihelp.AegiToClipper(shape), ClipperLib.PolyType.ptSubject, true)
 				cpr\AddPaths(Aegihelp.AegiToClipper(Yutils.shape.move(shape, res.horizontal, res.vertical)), ClipperLib.PolyType.ptClip, true)
-				solution_paths = Paths!
-				succeeded, solution_paths = cpr\Execute(ClipperLib.ClipType.ctDifference, solution_paths, ft1, ft2)
+
+				cpr\Execute(ClipperLib.ClipType.ctDifference, ft1, ft2)
 
 				shadowline.text = "{\\an7\\blur0\\bord0\\shad0\\fscx100\\fscy100\\pos(" .. data.pos.x .. "," .. data.pos.y .. ")\\p1}"
-				solution_paths = Aegihelp.ClipperToAegi(solution_paths)
+				solution_paths = Aegihelp.ClipperToAegi(cpr.FinalSolution)
 				for i = 1, #solution_paths
 					shadowline.text = shadowline.text .. solution_paths[i]
 
@@ -4917,10 +4270,9 @@ Main = (sub, sel) ->
 
 			perp_lines_expanded = {}
 			for i = 1, #perp_line
-				solution = Paths!
 				co = ClipperOffset(2, 0.25)
 				co\AddPaths(Aegihelp.AegiToClipper(perp_line[i]), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etOpenButt)
-				expanded_line = co\Execute(solution, res.gradientsize / 2 + res.gradientsize)
+				expanded_line = co\Execute(res.gradientsize / 2 + res.gradientsize)
 				table.insert(perp_lines_expanded, funzione(expanded_line))
 
 			--creazione colori
@@ -5031,9 +4383,9 @@ Main = (sub, sel) ->
 				cpr\AddPaths(Aegihelp.AegiToClipper(data.shape), ClipperLib.PolyType.ptSubject, true)
 				--cpr\AddPaths(Aegihelp.AegiToClipper(perp_lines_expanded[i]), ClipperLib.PolyType.ptClip, true)
 				cpr\AddPaths(Aegihelp.AegiToClipper(Yutils.shape.move(perp_lines_expanded[i], -data.pos.x, -data.pos.y)), ClipperLib.PolyType.ptClip, true)
-				solution_paths = Paths!
-				succeeded, solution_paths = cpr\Execute(ClipperLib.ClipType.ctIntersection, solution_paths, ft1, ft2)
-				solution_paths = Aegihelp.ClipperToAegi(solution_paths)
+
+				cpr\Execute(ClipperLib.ClipType.ctIntersection, ft1, ft2)
+				solution_paths = Aegihelp.ClipperToAegi(cpr.FinalSolution)
 				gradline = line
 				gradline.text = line.text\match("%b{}")
 				gradline.text = gradline.text\gsub("\\i?clip%b()", "")
@@ -5100,7 +4452,6 @@ Expand = (sub, sel) ->
 		line.text = line.text\match("%b{}")
 		line.text = line.text .. finalshape
 		sub[li] = line
-
 
 aegisub.register_macro(script_name, script_description, Main)
 aegisub.register_macro(": Shapery macros :/Clip To Shape", "Convert clip to shape", ClipToShape)

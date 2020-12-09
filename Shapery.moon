@@ -1,19 +1,18 @@
 export script_name = "Shapery"
 export script_description = "Try to emulate the most used tools of Illustrator."
 export script_author = "Alen"
-export script_version = "1.1.0"
+export script_version = "1.2.0"
 
 Helptext = "====== Comment and credits ======
 I'm not a programmer, most of the code is just a 1:1 copy from somewhere rewrote in moonscript.
 I do this only as a hobby and for fun. Don't get mad if the code is bad :)
 
-This automation is based from this library http://www.angusj.com/delphi/clipper.php.
-Actually I used the javascript version which you can find here https://sourceforge.net/projects/jsclipper/
-I used the javascript version as the base because c++ and such are just too hard for me to understand.
+This automation is based on this library http://www.angusj.com/delphi/clipper.php.
+I also used the javascript version as reference. You can find it here https://sourceforge.net/projects/jsclipper/
 
 If you find bugs or the results you are getting are wrong, please report them. Advices and ideas are welcome. (Check the TO-DO list before maybe)
 Be carefull with what you do. If you are doing something with complex shapes, you should save your script before running this automation.
-If you want to contact me to give advices or anything, you can do it on discord Alen#4976
+If you want to contact me for advices or anything, you can do it on discord Alen#4976
 
 ====== Pathfinder ======
 Given 2 polygons in the form of shape and clip, the automation will perform the selected operation between them.
@@ -21,11 +20,12 @@ Given 2 polygons in the form of shape and clip, the automation will perform the 
 -Union: the result will be an union between the shape and the clip.
 -Difference: the result will be the the shape minus the clip.
 -Intersect: the result will be a polygon composed by the part where both shape and clip are present.
--XOR: the opposite of intersect (maybe? lol)
+-XOR: the opposite of intersect
 
-It is possible to chose the filling rule of the 2 polygons (shape and clip) separately.
-I don't know if these is even useful tbh.
-Look it up online for the difference or just use NonZero.
+It is possible to chose the filling rule of the 2 polygons (shape and clip).
+Look it up online for the difference or just use NonZero, which is the one libass and vsfilter uses.
+
+The checkbox 'Multiline' allow for more lines to be selected, the script will use the first selected line as a Subject and all the others as Clip.
 
 ====== Offsetting ======
 Inflating and deflating polygons.
@@ -34,35 +34,46 @@ The arc tolerance define the precision a curve will have if the style Round is u
 
 ====== Others ======
 -Text to shape
-Explicative by the name. An important thing to keep in mind is that the position of the shape will be centered at 0,0 with \\an7.
-Having the shape centered makes it easier to add any rotation or scale tag.
+Explicative by the name. The result will maintain the same appearance the text had with all tags except for \\fax and \\fay.
+If you need these tags you should add them after the text is converted.
 
 -Inner Shadow
 Creates an inner shadow effect. One of the first thing you learn in Illustrator.
-You have to 'expand' the text before using this function because it only works with shapes.
+This function only works with shapes. If you want to use this on a text, you have to convert it to a shape before.
 
 -Move shape
-Since other (unanimated's) automations removes the decimals, I've added this to the script.
+Since other (unanimated's) automations removes the decimals, I've added this as well.
 Moves the shape by the specified amount.
 
 -Center Shape
-Move the shape so it will have its center to 0,0.
+Move the shape so that it has its center at 0,0.
 
 ====== Gradient ======
-This will allow you to create a gradient in a similar way you'd do in Illustrator.
-In order to use this you need to have at least 2 lines (or more depending on how many colors you need) and a clip in the first line of 2 points that will be used as the gradient start and ending point and the direction.
-Then you select all the lines you created, open the script and set the step size.
+This will allow you to create a gradient in a similar way you can do in Illustrator.
+In order to use this you need to have at least 2 lines (or more depending on how many colors you need) and a clip in the first line of 2 points.
+The two points will be used as the gradient start and ending position, the clip will also be used as the direction.
+After that you select all the lines you created, open the script, set the step size and press 'Gradient'.
 There should also be an option to let the user chose the overlap size, but from the test I've done the best results are obtainable by using the step size as overlap size as well, so I decided to remove it.
 
+====== Macros ======
+These are some function you can use without opening the GUI.
+-Clip To Shape
+
+-Shape To Clip
+
+-Expand
+Works only with shapes.
+Remove certain tags that change the aspect of the shape while preserving the appearance.
+Such tags are \\fscx, \\fscy, \\fax, \\fay, \\frx, \\fry, \\frz and \\org.
+Sometimes if there's extreme perspective this might produce wrong result, I'll come back to this later.
+
 ====== TO-DO ======
-1. A function that 'expands' fax(done), fay(done), frz, frx, fry, fscx(done), fscy(done).
-Beside frx and fry I have all this done already. I'm trying to understand how libass does that, but again I'm very bad at understand c and also very bad at math.
-2. Simplify polygons by recreating bezier curve.
+1. Simplify polygons by recreating bezier curve.
 The automation don't work with bezier, so all the path are flattened before being passed to the automation.
-By my understanding this only affect the filesize and not the renderer (at least libass), so it's fine to not have this for now. I'm not really sure about this, I might be wrong. 
-3. Shape generator.
+By my understanding this only affect the filesize and not the renderer (at least libass), so it's fine to not have this for now.
+2. Shape generator.
 Just like the most used font 'split spludge', 'grain', etc...
-4. Improve the 'Inner Shadow' function.
+3. Improve the 'Inner Shadow' function.
 It has a problem that i don't know how to explain. It's easy to fix anyway."
 
 
@@ -158,21 +169,6 @@ ClipperLib.Error = (message) ->
 	aegisub.log(message)
 	aegisub.cancel!
 
-ClipperLib.ClipperBase.SlopesEqual = (...) ->
-	a = {...}
-
-	if #a == 2 -- ClipperLib.ClipperBase.SlopesEqual3 = (e1, e2) ->
-		e1, e2 = a[1], a[2]
-		return ((e1.Delta.Y) * (e2.Delta.X)) == ((e1.Delta.X) * (e2.Delta.Y))
-
-	elseif #a == 3 -- ClipperLib.ClipperBase.SlopesEqual4 = (pt1, pt2, pt3) ->
-		pt1, pt2, pt3 = a[1], a[2], a[3]
-		return ((pt1.Y - pt2.Y) * (pt2.X - pt3.X)) - ((pt1.X - pt2.X) * (pt2.Y - pt3.Y)) == 0
-
-	elseif #a == 4 -- ClipperLib.ClipperBase.SlopesEqual5 = (pt1, pt2, pt3, pt4) ->
-		pt1, pt2, pt3, pt4 = a[1], a[2], a[3], a[4]
-		return ((pt1.Y - pt2.Y) * (pt3.X - pt4.X)) - ((pt1.X - pt2.X) * (pt3.Y - pt4.Y)) == 0
-
 BitXOR = (a, b) ->
 	p, c = 1, 0
 	while a>0 and b>0
@@ -193,10 +189,6 @@ Round = (val, dec) ->
 	return math.floor((val * 10^dec) + 0.5) / (10^dec)
 
 class Path
-	new: =>
-		self = {}
-
-class Paths
 	new: =>
 		self = {}
 
@@ -254,31 +246,6 @@ class PolyNode
 
 	IsHole: =>
 		return @IsHoleNode!
-
-class PolyTree extends PolyNode
-	class_name:"PolyTree"
-
-	new: =>
-		@m_AllPolys = {}
-
-	Clear: =>
-		for i = 1, #@m_AllPolys 
-			@m_AllPolys[i] = nil
-		@m_AllPolys = nil
-		@m_Childs = nil
-
-	GetFirst: =>
-		if #@m_Childs > 0
-			return @m_Childs[1]
-		else
-			return nil
-
-	Total: =>
-		result = #@m_AllPolys
-		--with negative offsets, ignore the hidden outer polygon ...
-		if (result > 0 and @m_Childs[1] != @m_AllPolys[1])
-			result -= 1
-		return result
 
 class Point
 	new: (...) =>
@@ -399,6 +366,21 @@ class Join
 		@OutPt1 = nil
 		@OutPt2 = nil
 		@OffPt = Point!
+
+ClipperLib.ClipperBase.SlopesEqual = (...) ->
+	a = {...}
+
+	if #a == 2 -- ClipperLib.ClipperBase.SlopesEqual3 = (e1, e2) ->
+		e1, e2 = a[1], a[2]
+		return ((e1.Delta.Y) * (e2.Delta.X)) == ((e1.Delta.X) * (e2.Delta.Y))
+
+	elseif #a == 3 -- ClipperLib.ClipperBase.SlopesEqual4 = (pt1, pt2, pt3) ->
+		pt1, pt2, pt3 = a[1], a[2], a[3]
+		return ((pt1.Y - pt2.Y) * (pt2.X - pt3.X)) - ((pt1.X - pt2.X) * (pt2.Y - pt3.Y)) == 0
+
+	elseif #a == 4 -- ClipperLib.ClipperBase.SlopesEqual5 = (pt1, pt2, pt3, pt4) ->
+		pt1, pt2, pt3, pt4 = a[1], a[2], a[3], a[4]
+		return ((pt1.Y - pt2.Y) * (pt3.X - pt4.X)) - ((pt1.X - pt2.X) * (pt3.Y - pt4.Y)) == 0
 
 ClipperLib.ClipperBase.near_zero = (val) ->
 	return (val > -ClipperLib.ClipperBase.tolerance) and (val < ClipperLib.ClipperBase.tolerance)
@@ -1058,13 +1040,6 @@ ClipperLib.Clipper.TopX = (edge, currentY) ->
 		return edge.Top.X
 	return edge.Bot.X + edge.Dx * (currentY - edge.Bot.Y)
 
-ClipperLib.Clipper.ReversePaths = (polys) ->
-	for i = 1, #polys
-		reversed = {}
-		for j = #polys[i], 1, -1
-			table.insert(reversed, polys[i][j])
-		polys[i] = reversed
-
 ClipperLib.Clipper.Orientation = (poly) ->
 	return ClipperLib.Clipper.Area(poly) >= 0
 
@@ -1093,52 +1068,6 @@ ClipperLib.Clipper.GetBounds = (paths) ->
 
 	return result
 
-ClipperLib.Clipper.PointInPolygon = (pt, path) ->
-	--returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-	--See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-	--http:--citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-	result = 0
-	cnt = #path
-	if (cnt < 3)
-		return 0
-	ip = path[1]
-	for i = 1, cnt
-		ipNext = nil
-		if i == cnt
-			ipNext = path[1]
-		else
-			ipNext = path[i]
-
-		if (ipNext.Y == pt.Y)
-			if ((ipNext.X == pt.X) or (ip.Y == pt.Y and ((ipNext.X > pt.X) == (ip.X < pt.X))))
-				return -1
-		if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
-			if (ip.X >= pt.X)
-				if (ipNext.X > pt.X)
-					result = 1 - result
-				else
-					d = (ip.X - pt.X) * (ipNext.Y - pt.Y) - (ipNext.X - pt.X) * (ip.Y - pt.Y)
-					if (d == 0)
-						return -1
-					elseif ((d > 0) == (ipNext.Y > ip.Y))
-						result = 1 - result
-			else
-				if (ipNext.X > pt.X)
-					d = (ip.X - pt.X) * (ipNext.Y - pt.Y) - (ipNext.X - pt.X) * (ip.Y - pt.Y)
-					if (d == 0)
-						return -1
-					elseif ((d > 0) == (ipNext.Y > ip.Y))
-						result = 1 - result
-
-		ip = ipNext
-
-	return result
-
-ClipperLib.Clipper.ParseFirstLeft = (FirstLeft) ->
-	while (FirstLeft != nil and FirstLeft.Pts == nil)
-		FirstLeft = FirstLeft.FirstLeft
-	return FirstLeft
-
 ClipperLib.Clipper.Area = (poly) ->
 	if (not type(poly) != "table")
 		return 0
@@ -1152,110 +1081,6 @@ ClipperLib.Clipper.Area = (poly) ->
 
 	return -a * 0.5
 
-ClipperLib.Clipper.DistanceSqrd = (pt1, pt2) ->
-	dx = (pt1.X - pt2.X)
-	dy = (pt1.Y - pt2.Y)
-	return (dx * dx + dy * dy)
-
-ClipperLib.Clipper.DistanceFromLineSqrd = (pt, ln1, ln2) ->
-	--The equation of a line in general form (Ax + By + C = 0)
-	--given 2 points (x¹,y¹) & (x²,y²) is ...
-	--(y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
-	--A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
-	--perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
-	--see http://en.wikipedia.org/wiki/Perpendicular_distance
-	A = ln1.Y - ln2.Y
-	B = ln2.X - ln1.X
-	C = A * ln1.X + B * ln1.Y
-	C = A * pt.X + B * pt.Y - C
-	return (C * C) / (A * A + B * B)
-
-ClipperLib.Clipper.SlopesNearCollinear = (pt1, pt2, pt3, distSqrd) ->
-	--this function is more accurate when the point that's GEOMETRICALLY
-	--between the other 2 points is the one that's tested for distance.
-	--nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts
-	if (math.abs(pt1.X - pt2.X) > math.abs(pt1.Y - pt2.Y))
-		if ((pt1.X > pt2.X) == (pt1.X < pt3.X))
-			return ClipperLib.Clipper.DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd
-		elseif ((pt2.X > pt1.X) == (pt2.X < pt3.X))
-			return ClipperLib.Clipper.DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd
-		else
-			return ClipperLib.Clipper.DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd
-
-	else
-		if ((pt1.Y > pt2.Y) == (pt1.Y < pt3.Y))
-			return ClipperLib.Clipper.DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd
-		elseif ((pt2.Y > pt1.Y) == (pt2.Y < pt3.Y))
-			return ClipperLib.Clipper.DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd
-		else
-			return ClipperLib.Clipper.DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd
-
-ClipperLib.Clipper.PointsAreClose = (pt1, pt2, distSqrd) ->
-	dx = pt1.X - pt2.X
-	dy = pt1.Y - pt2.Y
-	return ((dx * dx) + (dy * dy) <= distSqrd)
-
-ClipperLib.Clipper.ExcludeOp = (op) ->
-	result = op.Prev
-	result.Next = op.Next
-	op.Next.Prev = result
-	result.Idx = 0
-	return result
-
-ClipperLib.Clipper.CleanPolygon = (path, distance) ->
-	if (distance == nil)
-		distance = 1.415
-	--distance = proximity in units/pixels below which vertices will be stripped.
-	--Default ~= sqrt(2) so when adjacent vertices or semi-adjacent vertices have
-	--both x & y coords within 1 unit, then the second vertex will be stripped.
-	cnt = #path
-	if (cnt == 0)
-		return {}
-	outPts = {cnt}
-	for i = 1, cnt
-		outPts[i] = OutPt!
-	for i = 1, cnt
-		outPts[i].Pt = path[i]
-		outPts[i].Next = outPts[(i + 1) % cnt]
-		outPts[i].Next.Prev = outPts[i]
-		outPts[i].Idx = 0
-
-	distSqrd = distance * distance
-	op = outPts[0]
-	while (op.Idx == 0 and op.Next != op.Prev)
-		if (ClipperLib.Clipper.PointsAreClose(op.Pt, op.Prev.Pt, distSqrd))
-			op = ClipperLib.Clipper.ExcludeOp(op)
-			cnt -= 1
-
-		elseif (ClipperLib.Clipper.PointsAreClose(op.Prev.Pt, op.Next.Pt, distSqrd))
-			ClipperLib.Clipper.ExcludeOp(op.Next)
-			op = ClipperLib.Clipper.ExcludeOp(op)
-			cnt -= 2
-
-		elseif (ClipperLib.Clipper.SlopesNearCollinear(op.Prev.Pt, op.Pt, op.Next.Pt, distSqrd))
-			op = ClipperLib.Clipper.ExcludeOp(op)
-			cnt -= 1
-
-		else
-			op.Idx = 1
-			op = op.Next
-
-	if (cnt < 3)
-		cnt = 0
-	result = {cnt}
-	for i = 1, cnt
-		result[i] = Point(op.Pt)
-		op = op.Next
-
-	outPts = nil
-	return result
-
-ClipperLib.Clipper.CleanPolygons = (polys, distance) ->
-	result = {#polys}
-	for i = 1, #polys
-		result[i] = ClipperLib.Clipper.CleanPolygon(polys[i], distance)
-	return result
-
 class Clipper extends ClipperBase
 	new: (InitOptions) =>
 		if InitOptions == nil then InitOptions = 0
@@ -1264,7 +1089,6 @@ class Clipper extends ClipperBase
 		@m_ClipType = ClipperLib.ClipType.ctIntersection
 		@m_ClipFillType = ClipperLib.PolyFillType.pftEvenOdd
 		@m_SubjFillType = ClipperLib.PolyFillType.pftEvenOdd
-		@m_UsingPolyTree = false
 		@m_Scanbeam = nil
 		@m_Maxima = nil
 		@m_ActiveEdges = nil
@@ -1323,7 +1147,6 @@ class Clipper extends ClipperBase
 		@m_SubjFillType = subjFillType
 		@m_ClipFillType = clipFillType
 		@m_ClipType = clipType
-		@m_UsingPolyTree = false
 
 		succeeded = @ExecuteInternal!
 		if (succeeded)
@@ -3322,46 +3145,6 @@ class Clipper extends ClipperBase
 
 		return true
 
-	FixupFirstLefts1: (OldOutRec, NewOutRec) =>
-		outRec, firstLeft = nil
-		for i = 1, #@m_PolyOuts
-			outRec = @m_PolyOuts[i]
-			firstLeft = ClipperLib.Clipper.ParseFirstLeft(outRec.FirstLeft)
-			if (outRec.Pts != nil and firstLeft == OldOutRec)
-				if (@Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts))
-					outRec.FirstLeft = NewOutRec
-
-	FixupFirstLefts2: (innerOutRec, outerOutRec) =>
-		--A polygon has split into two such that one is now the inner of the other.
-		--It's possible that these polygons now wrap around other polygons, so check
-		--every polygon that's also contained by OuterOutRec's FirstLeft container
-		--(including nil) to see if they've become inner to the new inner polygon ...
-		orfl = outerOutRec.FirstLeft
-		outRec, firstLeft = nil
-		for i = 1, #@m_PolyOuts
-			outRec = @m_PolyOuts[i]
-			if (outRec.Pts == nil or outRec == outerOutRec or outRec == innerOutRec)
-				continue
-			firstLeft = ClipperLib.Clipper.ParseFirstLeft(outRec.FirstLeft)
-			if (firstLeft != orfl and firstLeft != innerOutRec and firstLeft != outerOutRec)
-				continue
-			if (@Poly2ContainsPoly1(outRec.Pts, innerOutRec.Pts))
-				outRec.FirstLeft = innerOutRec
-			elseif (@Poly2ContainsPoly1(outRec.Pts, outerOutRec.Pts))
-				outRec.FirstLeft = outerOutRec
-			elseif (outRec.FirstLeft == innerOutRec or outRec.FirstLeft == outerOutRec)
-				outRec.FirstLeft = orfl
-
-	FixupFirstLefts3: (OldOutRec, NewOutRec) =>
-		--same as FixupFirstLefts1 but doesn't call Poly2ContainsPoly1()
-		outRec = nil
-		firstLeft = nil
-		for i = 1, #@m_PolyOuts
-			outRec = @m_PolyOuts[i]
-			firstLeft = ClipperLib.Clipper.ParseFirstLeft(outRec.FirstLeft)
-			if (outRec.Pts != nil and firstLeft == OldOutRec)
-				outRec.FirstLeft = NewOutRec
-
 	JoinCommonEdges: =>
 		for i = 1, #@m_Joins
 			join = @m_Joins[i]
@@ -3403,8 +3186,6 @@ class Clipper extends ClipperBase
 					--outRec1 contains outRec2 ...
 					outRec2.IsHole = not outRec1.IsHole
 					outRec2.FirstLeft = outRec1
-					if (@m_UsingPolyTree)
-						@FixupFirstLefts2(outRec2, outRec1)
 
 					if  (BitXOR(outRec2.IsHole == true and 1 or 0, @ReverseSolution == true and 1 or 0)) == ((@AreaS1(outRec2) > 0) == true and 1 or 0)
 						@ReversePolyPtLinks(outRec2.Pts)
@@ -3415,8 +3196,6 @@ class Clipper extends ClipperBase
 					outRec1.IsHole = not outRec2.IsHole
 					outRec2.FirstLeft = outRec1.FirstLeft
 					outRec1.FirstLeft = outRec2
-					if (@m_UsingPolyTree)
-						@FixupFirstLefts2(outRec1, outRec2)
 
 					if  (BitXOR(outRec1.IsHole == true and 1 or 0, @ReverseSolution == true and 1 or 0)) == ((@AreaS1(outRec1) > 0) == true and 1 or 0)
 						@ReversePolyPtLinks(outRec1.Pts)
@@ -3425,9 +3204,6 @@ class Clipper extends ClipperBase
 					--the 2 polygons are completely separate ...
 					outRec2.IsHole = outRec1.IsHole
 					outRec2.FirstLeft = outRec1.FirstLeft
-					--fixup FirstLeft pointers that may need reassigning to OutRec2
-					if (@m_UsingPolyTree)
-						@FixupFirstLefts1(outRec1, outRec2)
 
 			else
 				--joined 2 polygons together ...
@@ -3438,9 +3214,6 @@ class Clipper extends ClipperBase
 				if (holeStateRec == outRec2)
 					outRec1.FirstLeft = outRec2.FirstLeft
 				outRec2.FirstLeft = outRec1
-				--ixup FirstLeft pointers that may need reassigning to OutRec1
-				if (@m_UsingPolyTree)
-					@FixupFirstLefts3(outRec2, outRec1)
 
 	UpdateOutPtIdxs: (outrec) =>
 		op = outrec.Pts
@@ -3532,7 +3305,7 @@ ClipperLib.ClipperOffset.GetUnitNormal = (pt1, pt2) ->
 
 class ClipperOffset
 	new: (miterLimit, arcTolerance) =>
-		@m_destPolys = Paths!
+		@m_destPolys = Path!
 		@m_srcPoly = Path!
 		@m_destPoly = Path!
 		@m_normals = {}
@@ -3547,6 +3320,8 @@ class ClipperOffset
 		@MiterLimit = miterLimit or 2
 		@ArcTolerance = arcTolerance or ClipperLib.ClipperOffset.def_arc_tolerance
 		@m_lowest.X = -1
+
+		@FinalSolution = nil
 
 	Clear: =>
 		ClipperLib.Clear(@m_polyNodes.Childs)
@@ -3617,7 +3392,6 @@ class ClipperOffset
 		@m_delta = delta
 		--if Zero offset, just copy any CLOSED polygons to m_p and return ...
 		if (ClipperLib.ClipperBase.near_zero(delta))
-			--@m_destPolys.set_Capacity(@m_polyNodes.ChildCount);
 			for i = 1, @m_polyNodes\ChildCount()
 				node = @m_polyNodes\Childs()[i]
 				if (node.m_endtype == ClipperLib.EndType.etClosedPolygon)
@@ -3643,7 +3417,7 @@ class ClipperOffset
 		@m_StepsPerRad = steps / ClipperLib.ClipperOffset.two_pi
 		if (delta < 0)
 			@m_sin = -@m_sin
-		--@m_destPolys.set_Capacity(@m_polyNodes.ChildCount * 2);
+
 		for i = 1, @m_polyNodes\ChildCount()
 			node = @m_polyNodes\Childs()[i]
 
@@ -3657,7 +3431,7 @@ class ClipperOffset
 				if (node.m_jointype == ClipperLib.JoinType.jtRound)
 					X = 1
 					Y = 0
-					for j = 1, steps -- partire da 2?
+					for j = 1, steps
 						table.insert(@m_destPoly, Point(@m_srcPoly[1].X + X * delta, @m_srcPoly[1].Y + Y * delta))
 						X2 = X
 						X = X * @m_cos - @m_sin * Y
@@ -3680,7 +3454,6 @@ class ClipperOffset
 
 			--build m_normals ...
 			@m_normals = {}
-			--@m_normals.set_Capacity(len);
 			for j = 1, len - 1
 				table.insert(@m_normals, ClipperLib.ClipperOffset.GetUnitNormal(@m_srcPoly[j], @m_srcPoly[j + 1]))
 
@@ -3756,8 +3529,6 @@ class ClipperOffset
 				table.insert(@m_destPolys, @m_destPoly)
 
 	Execute: (delta) =>
-		test = nil
-
 		@FixOrientations!
 		@DoOffset(delta)
 		-- now clean up 'corners' ...
@@ -3779,23 +3550,18 @@ class ClipperOffset
 			if (#clpr.FinalSolution > 1)
 				table.remove(clpr.FinalSolution, 1)
 
-		return clpr.FinalSolution
+		@FinalSolution = clpr.FinalSolution
 
 	OffsetPoint: (j, k, jointype) =>
 		--cross product ...
 		@m_sinA = (@m_normals[k].X * @m_normals[j].Y) - (@m_normals[j].X * @m_normals[k].Y)
 		
-		if (math.abs(@m_sinA * @m_delta) < 1.0)
-			--dot product ...
-			cosA = (@m_normals[k].X * @m_normals[j].X + @m_normals[j].Y * @m_normals[k].Y)
-			if (cosA > 0) -- angle ==> 0 degrees
-				table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[k].X * @m_delta, @m_srcPoly[j].Y + @m_normals[k].Y * @m_delta))
-				return k
-
+		if @m_sinA == 0
+			return k
 		elseif (@m_sinA > 1)
-			@m_sinA = 1.0
+			@m_sinA = 1
 		elseif (@m_sinA < -1)
-			@m_sinA = -1.0
+			@m_sinA = -1
 		if (@m_sinA * @m_delta < 0)
 			table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[k].X * @m_delta, @m_srcPoly[j].Y + @m_normals[k].Y * @m_delta))
 			table.insert(@m_destPoly, Point(@m_srcPoly[j]))
@@ -3844,89 +3610,14 @@ class ClipperOffset
 
 		table.insert(@m_destPoly, Point(@m_srcPoly[j].X + @m_normals[j].X * @m_delta, @m_srcPoly[j].Y + @m_normals[j].Y * @m_delta))
 
---------------------------------------------------------------------------
-
-class Matrix
-	new: (pts) =>
-		@pts = pts
-		@result = {}
-
-	Reset: =>
-		@matrix = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}
-
-	matrix: {1, 0, 0, 0,
-			 0, 1, 0, 0,
-			 0, 0, 1, 0,
-			 0, 0, 0, 1}
-
-	Multiply: (matrix2) =>
-
-		new_matrix = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-
-		for i = 1, 16
-			for j = 0, 3
-				new_matrix[i] = new_matrix[i] + @matrix[1 + (i - 1) % 4 + j * 4] * matrix2[1 + math.floor((i - 1) / 4) * 4 + j]
-
-		@matrix = new_matrix
-
-
-	Traslate: (x, y, z) =>
-		@Multiply({1, 0, 0, 0,
-					0, 1, 0, 0,
-					0, 0, 1, 0,
-					x, y, z, 1})
-
-	RotateX: (angle) =>
-		angle = math.rad(angle)
-		@Multiply({1, 0, 0, 0,
-					0, math.cos(angle), -math.sin(angle), 0,
-					0, math.sin(angle), math.cos(angle), 0,
-					0, 0, 0, 1})
-
-	RotateY: (angle) =>
-		angle = math.rad(angle)
-		@Multiply({math.cos(angle), 0, math.sin(angle), 0,
-					0, 1, 0, 0,
-					-math.sin(angle), 0, math.cos(angle), 0,
-					0, 0, 0, 1})
-
-	RotateZ: (angle) =>
-		angle = math.rad(angle)
-		@Multiply({math.cos(angle), -math.sin(angle), 0, 0,
-					math.sin(angle), math.cos(angle), 0, 0,
-					0, 0, 1, 0,
-					0, 0, 0, 1})
-
-	Scale: (sx, sy, sz) =>
-		sx = sx / 100
-		sy = sy / 100 
-		sz = 1 if sz == nil or sz / 100
-		@Multiply({sx, 0, 0, 0,
-					0, sy, 0, 0,
-					0, 0, sz, 0,
-					0, 0, 0, 1})
-
-	Shear: (fax, fay) =>
-		@Multiply({1, fay, 0, 0,
-					fax, 1, 0, 0,
-					0, 0, 1, 0,
-					0, 0, 0, 1})
-
-	Transform: =>
-		z = 0
-		w = 1
-		for i = 1, #@pts
-			table.insert(@result, {})
-			for j = 1, #@pts[i]
-				table.insert(@result[i], {X:(@pts[i][j].X * @matrix[1] + @pts[i][j].Y * @matrix[5] + z * @matrix[9] + w * @matrix[13]), Y:(@pts[i][j].X * @matrix[2] + @pts[i][j].Y * @matrix[6] + z * @matrix[10] + w * @matrix[14])})
-		--@pts.X = (@pts.X * @matrix[1] + @pts.Y * @matrix[5] + z * @matrix[9] + w * @matrix[13])
-		--@pts.Y = (@pts.X * @matrix[2] + @pts.Y * @matrix[6] + z * @matrix[10] + w * @matrix[14])
-		--@pts.Z = (@pts[i].X * @matrix[3] + @pts[i].Y * @matrix[7] + @pts[i].Z * @matrix[11] + w * @matrix[15])
-		--@pts.W = (@pts[i].X * @matrix[4] + @pts[i].Y * @matrix[8] + @pts[i].Z * @matrix[12] + w * @matrix[16])
-
-		@Reset!
-
 Aegihelp = {}
+
+Aegihelp.Error = (log) ->
+	aegisub.log(tostring(log) .. "\n\n")
+	aegisub.cancel!
+
+Aegihelp.Log = (log) ->
+	aegisub.log(tostring(log) .. "\n\n")
 
 Aegihelp.AegiToClipper = (clip) ->
 	clip = Yutils.shape.flatten(clip)
@@ -3957,7 +3648,19 @@ Aegihelp.ClipperToAegi = (a) ->
 		table.insert(strs, str)
 		str = ""
 
-	return strs
+	str = ""
+	for i = 1, #strs
+		str = str .. strs[i]
+
+	return str
+
+Aegihelp.Move = (shape, horizontal, vertical) ->
+	for i = 1, #shape
+		for k = 1, #shape[i]
+			shape[i][k].X += horizontal
+			shape[i][k].Y += vertical
+
+	return shape
 
 Aegihelp.GetLine = (line) ->
 	text, style = line.text, line.styleref
@@ -3970,13 +3673,21 @@ Aegihelp.GetLine = (line) ->
 		else
 			clip = clip\gsub('\\i?clip%(', '')\gsub('%)', '')
 
-	local shape
+	local shape, words
 	if text\match '^{[^}]-\\p1'
 		shape = text\match '}([^{]+)'
+		words = nil
+	else
+		shape = nil
+		words = text\match '}([^{]+)'
 
 	x, y = text\match '{[^}]-\\pos%(([%d.-]+),([%d.-]+)%)'
 	x = tonumber(x) or line.x
 	y = tonumber(y) or line.y
+
+	org_x, org_y = text\match '{[^}]-\\org%(([%d.-]+),([%d.-]+)%)'
+	org_x = tonumber(org_x) or x
+	org_y = tonumber(org_y) or y
 
 	getStr = (tag, default) -> text\match("{[^}]-\\#{tag}([^\\]+)") or default
 	getNum = (tag, default) -> tonumber(text\match "{[^}]-\\#{tag}(%-?[0-9.]+)") or default
@@ -3984,6 +3695,10 @@ Aegihelp.GetLine = (line) ->
 		when '0' then false
 		when '1' then true
 		when nil then default
+	getCol = (tag, default) ->
+		c = text\match("{[^}]-\\#{tag}(&H%x+&)")
+		if c == nil then c = default\gsub("&H..", "&H")
+		return c
 
 	return {
 		:clip
@@ -4003,20 +3718,36 @@ Aegihelp.GetLine = (line) ->
 		fax:       getNum  'fax',  0
 		fay:       getNum  'fay',  0
 		shad:      getNum  'shad', style.shadow
-		text: text\gsub '%b{}', ''
+		bord:      getNum  'bord', style.outline
+		blur:      getNum  'blur', 1
+		text: words
 		pos: {:x, :y}
+		org: {x:org_x, y:org_y}
+		color1:    getCol  'c',    style.color1
+		color2:    getCol  '2c',   style.color2
+		color3:    getCol  '3c',   style.color3
+		color4:    getCol  '4c',   style.color4
 	}
 
 Aegihelp.TextToShape = (data) ->
-	textshape = Yutils.decode.create_font(data.family, data.bold, data.italic, data.underline, data.strikeout, data.size, data.xscale / 100, data.yscale / 100, data.hspace).text_to_shape(data.text)
-	center = Aegihelp.FindCenter(textshape)
-	textshape = Yutils.shape.move(textshape, -(tonumber(center.x)), -(tonumber(center.y)))
-	return textshape
+	--what a mess this is, yutils move the generated shapes in a weird way that i don't understand
+	--i'll get back to this
+	if data.text == nil
+		Aegihelp.Log("There is no text in the line")
+	
+	font = Yutils.decode.create_font(data.family, data.bold, data.italic, data.underline, data.strikeout, data.size, data.xscale / 100, data.yscale / 100, data.hspace)
+	textshape = font.text_to_shape(data.text)
+	metrics = font.metrics()
+	extents = font.text_extents(data.text)
+	extents1 = Yutils.decode.create_font(data.family, data.bold, data.italic, data.underline, data.strikeout, data.size * data.xscale / 100, 1, 1, data.hspace).text_extents(data.text)
+	data.shape = Aegihelp.Move(Aegihelp.AegiToClipper(textshape), -(tonumber(extents1.width/2)), -(tonumber(extents.height/2)))
+	data.xscale, data.yscale = 100, 100
+	return data.shape
 
-Aegihelp.FindCenter = (polygon) ->
-	polygon = Yutils.shape.flatten(polygon)
+Aegihelp.FindCenter = (shape) ->
+	shape = Yutils.shape.flatten(shape)
 	points = {}
-	for x, y in polygon\gmatch("([-%d.]+).([-%d.]+)")
+	for x, y in shape\gmatch("([-%d.]+).([-%d.]+)")
 		table.insert(points, {x: tonumber(x), y: tonumber(y)})
 
 	topX = points[1].x
@@ -4037,15 +3768,78 @@ Aegihelp.FindCenter = (polygon) ->
 
 	return {x: ((topX - bottomX) / 2) + bottomX, y: ((topY - bottomY) / 2) + bottomY}
 
+Aegihelp.Expand = (data) ->
+	points = data.shape
+
+	if type(data.shape) != "table"
+		points = Aegihelp.AegiToClipper(data.shape)
+
+	--copied from libass calc_transformation_matrix
+	frx = math.pi / 180 * data.frx
+	fry = math.pi / 180 * data.fry
+	frz = math.pi / 180 * data.frz
+
+	sx, cx = -math.sin(frx), math.cos(frx)
+	sy, cy =  math.sin(fry), math.cos(fry)
+	sz, cz = -math.sin(frz), math.cos(frz)
+
+	xscale = data.xscale / 100
+	yscale = data.yscale / 100
+
+	fax = data.fax * data.xscale / data.yscale
+	fay = data.fay * data.yscale / data.xscale
+	x1 = {1, fax, data.pos.x - data.org.x}
+	y1 = {fay, 1, data.pos.y - data.org.y}
+
+	x2, y2 = {}, {}
+	for i = 1, 3
+		x2[i] = x1[i] * cz - y1[i] * sz
+		y2[i] = x1[i] * sz + y1[i] * cz
+
+	y3, z3 = {}, {}
+	for i = 1, 3
+		y3[i] = y2[i] * cx
+		z3[i] = y2[i] * sx
+
+	x4, z4 = {}, {}
+	for i = 1, 3
+		x4[i] = x2[i] * cy - z3[i] * sy
+		z4[i] = x2[i] * sy + z3[i] * cy
+
+	dist = 312.5
+	z4[3] += dist
+
+	offs_x = data.org.x - data.pos.x
+	offs_y = data.org.y - data.pos.y
+
+	m = {}
+	m[1], m[2], m[3] = {}, {}, {}
+	for i = 1, 3
+		m[1][i] = z4[i] * offs_x + x4[i] * dist
+		m[2][i] = z4[i] * offs_y + y3[i] * dist
+		m[3][i] = z4[i]
+
+	--copied from libass outline_transform_3d
+	--when there's extreme perspective this doesn't work, i'll come back to this later
+	for i = 1, #points
+		for k = 1, #points[i]
+			v = {}
+			for j = 1, 3
+				v[j] = (m[j][1] * points[i][k].X * xscale) + (m[j][2] * points[i][k].Y * yscale) + m[j][3] 
+
+			w = 1 / math.max(v[3], 0.1)
+			points[i][k].X = Round(v[1] * w, 2)
+			points[i][k].Y = Round(v[2] * w, 2)
+
+	return points
+
 GUI = {
 	main: {
 		{class: "label", label: "Pathfinder", x: 1, y: 0},
 		{class: "dropdown", name: "pathfinder", value: "Union", items: {"Union", "Intersect", "Difference", "XOR"}, x: 0, y: 0},
-		{class: "dropdown", name: "subjectfilltype", value: "NonZero", items: {"NonZero", "EvenOdd"}, x: 0, y: 1},
-		{class: "label", label: "Subject FillType", x: 1, y: 1},
-		{class: "dropdown", name: "clipfilltype", value: "NonZero", items: {"NonZero", "EvenOdd"}, x: 0, y: 2},
-		{class: "label", label: "Clip FillType", x: 1, y: 2},
-		{class: "checkbox", label: "Multiline", name: "multiline", value: false, x: 0, y: 3, width: 1, height: 1},
+		{class: "dropdown", name: "filltype", value: "NonZero", items: {"NonZero", "EvenOdd"}, x: 0, y: 1},
+		{class: "label", label: "FillType", x: 1, y: 1},
+		{class: "checkbox", label: "Multiline", name: "multiline", value: false, x: 0, y: 2, width: 1, height: 1},
 
 		{class: "label", label: "Offsetting", x: 0, y: 6},
 		{class: "floatedit", name: "delta", x: 1, y: 6, width: 1, height: 1, hint: "delta", value: 0},
@@ -4073,16 +3867,22 @@ GUI = {
 	},
 	help: {
 		{class: "textbox", x: 0, y: 0, width: 45, height: 15, value: Helptext}
+	},
+	config: {
+		{class: "label", label: "Coming soon", x: 0, y: 0}
 	}
 }
 
-Main = (sub, sel) ->
+local SUBTITLES, SELECTED_LINE, ACTIVE_LINE
+
+Shapery = {}
+
+Shapery.Main = (sub, sel) ->
+	SUBTITLES, SELECTED_LINE = sub, sel
 	run, res = aegisub.dialog.display(GUI.main, {"Pathfinder", "Offsetting", "Others", "Gradient", "Help", "Exit"}, {close: "Exit"})
 
 	if run == "Help"
-		run, res = aegisub.dialog.display(GUI.help, {"Shapery", "Exit"}, {close: "Exit"})
-		if run == "Shapery"
-			run, res = aegisub.dialog.display(GUI.main, {"Pathfinder", "Offsetting", "Others", "Gradient", "Help", "Exit"}, {close: "Exit"})
+		Shapery.Help!
 
 	meta, styles = karaskel.collect_head sub, false
 
@@ -4091,121 +3891,130 @@ Main = (sub, sel) ->
 		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 
-		ft1 = res.subjectfilltype == "EvenOdd" and ClipperLib.PolyFillType.pftEvenOdd or ClipperLib.PolyFillType.pftNonZero
-		ft2 = res.clipfilltype == "EvenOdd" and ClipperLib.PolyFillType.pftEvenOdd or ClipperLib.PolyFillType.pftNonZero
+		ft = res.filltype == "NonZero" and ClipperLib.PolyFillType.pftNonZero or ClipperLib.PolyFillType.pftEvenOdd
 
 		if run == "Pathfinder"
-			if data.clip != nil
-				data.clip = data.clip\gsub("clip%(", "")\gsub("%)", "")
-				data.clip = Yutils.shape.move(data.clip, -data.pos.x, -data.pos.y)
-			
 			cpr = Clipper!
 
-			if res.multiline == false
+			line_number = 0
+			if not res.multiline
+				if data.clip == nil
+					Aegihelp.Error("\\clip missing from line")
+				
+				data.clip = data.clip\gsub("clip%(", "")\gsub("%)", "")
+				data.clip = Aegihelp.Move(Aegihelp.AegiToClipper(data.clip), -data.pos.x, -data.pos.y)
+				
 				cpr\AddPaths(Aegihelp.AegiToClipper(data.shape), ClipperLib.PolyType.ptSubject, true)
-				cpr\AddPaths(Aegihelp.AegiToClipper(data.clip), ClipperLib.PolyType.ptClip, true)
+				cpr\AddPaths(data.clip, ClipperLib.PolyType.ptClip, true)
+
 			else
-				j = 1
-				for si2, li2 in ipairs(sel)
-					linez = sub[li2]
-					karaskel.preproc_line sub, meta, styles, linez
-					data2 = Aegihelp.GetLine(linez)
-					if j == 1
-						cpr\AddPaths(Aegihelp.AegiToClipper(data2.shape), ClipperLib.PolyType.ptSubject, true)
-						j = 0
+				commonpos = nil
+				for tmp_si, tmp_li in ipairs(sel)
+					tmp_line = sub[tmp_li]
+					karaskel.preproc_line sub, meta, styles, tmp_line
+					tmp_data = Aegihelp.GetLine(tmp_line)
+					if line_number == 0
+						commonpos = tmp_data.pos
+						cpr\AddPaths(Aegihelp.AegiToClipper(tmp_data.shape), ClipperLib.PolyType.ptSubject, true)
+						line_number += 1
+						tmp_line.comment = true
+						sub[tmp_li] = tmp_line
 						continue
-					cpr\AddPaths(Aegihelp.AegiToClipper(data2.shape), ClipperLib.PolyType.ptClip, true)
-					linez.comment = true
-					sub[li2] = linez
-			
-			if res.pathfinder == "Union"
-				cpr\Execute(ClipperLib.ClipType.ctUnion, ft1, ft2)
-			if res.pathfinder == "Intersect"
-				cpr\Execute(ClipperLib.ClipType.ctIntersection, ft1, ft2)
-			if res.pathfinder == "Difference"
-				cpr\Execute(ClipperLib.ClipType.ctDifference, ft1, ft2)
-			if res.pathfinder == "XOR"
-				cpr\Execute(ClipperLib.ClipType.ctXor, ft1, ft2)
+					if commonpos != tmp_data.pos
+						tmp_data.shape = Aegihelp.Move(Aegihelp.AegiToClipper(tmp_data.shape), tmp_data.pos.x - commonpos.x, tmp_data.pos.y - commonpos.y)
+						cpr\AddPaths(tmp_data.shape, ClipperLib.PolyType.ptClip, true)
+					else
+						cpr\AddPaths(Aegihelp.AegiToClipper(tmp_data.shape), ClipperLib.PolyType.ptClip, true)
+					line_number += 1
+					tmp_line.comment = true
+					sub[tmp_li] = tmp_line
 
-			line.text = line.text\gsub("\\i?clip%b()", "")
-			solution_paths = Aegihelp.ClipperToAegi(cpr.FinalSolution)
-			line.text = line.text\match("%b{}")
-			for i = 1, #solution_paths
-				line.text = line.text .. solution_paths[i]
+			switch res.pathfinder
+				when "Union"      then cpr\Execute(ClipperLib.ClipType.ctUnion, ft, ft)
+				when "Intersect"  then cpr\Execute(ClipperLib.ClipType.ctIntersection, ft, ft)
+				when "Difference" then cpr\Execute(ClipperLib.ClipType.ctDifference, ft, ft)
+				when "XOR"        then cpr\Execute(ClipperLib.ClipType.ctXor, ft, ft)
 
-			sub[li] = line
+			line.text = line.text\gsub("\\i?clip%b()", "")\match("%b{}") .. Aegihelp.ClipperToAegi(cpr.FinalSolution)
 
-			if res.multiline break
-
+			if res.multiline
+				sub.insert(li + line_number, line)
+				break
+			else
+				sub[li] = line
 
 		if run == "Offsetting"
-			jt, et = nil
-			if res.jointype == "Miter"
-				jt = ClipperLib.JoinType.jtMiter
-			elseif res.jointype == "Round"
-				jt = ClipperLib.JoinType.jtRound
-			elseif res.jointype == "Square"
-				jt = ClipperLib.JoinType.jtSquare
+			if data.shape == nil
+				Aegihelp.Error("Shape missing")
 
-			if res.endtype == "ClosedPolygon"
-				et = ClipperLib.EndType.etClosedPolygon
-			elseif res.endtype == "ClosedLine"
-				et = ClipperLib.EndType.etClosedLine
+			local jt, et
 
-			paths = ClipperLib.Clipper.SimplifyPolygons(Aegihelp.AegiToClipper(data.shape), ClipperLib.Clipper.pftNonZero)
+			switch res.jointype
+				when "Miter"  then jt = ClipperLib.JoinType.jtMiter 
+				when "Round"  then jt = ClipperLib.JoinType.jtRound
+				when "Square" then jt = ClipperLib.JoinType.jtSquare
+
+			switch res.endtype
+				when "ClosedPolygon" then et = ClipperLib.EndType.etClosedPolygon
+				when "ClosedLine"    then et = ClipperLib.EndType.etClosedLine
+
+			shape = ClipperLib.Clipper.SimplifyPolygons(Aegihelp.AegiToClipper(data.shape), ClipperLib.Clipper.pftNonZero)
 
 			co = ClipperOffset(res.miterLimit, res.arcTolerance)
-			co\AddPaths(paths, jt, et)
-			solution = co\Execute(res.delta)
+			co\AddPaths(shape, jt, et)
+			co\Execute(res.delta)
 
-			line.text = line.text\match("%b{}")
-			solution = Aegihelp.ClipperToAegi(solution)
-			for i = 1, #solution
-				line.text = line.text .. solution[i]
+			line.text = line.text\match("%b{}") .. Aegihelp.ClipperToAegi(co.FinalSolution)
 
 			sub[li] = line
 
 		if run == "Others"
 			if res.others == "Text to Shape"
-				textshape = Aegihelp.TextToShape(data)
-				line.text = "{\\an7\\blur0\\bord0\\shad0\\fscx100\\fscy100\\pos(" .. data.pos.x .. "," .. data.pos.y .. ")\\p1}" .. textshape
+				if data.text == nil
+					Aegihelp.Error("Text missing")
+
+				if data.fax != 0 or data.fay != 0
+					Aegihelp.Log("\\fax and \\fay might cause wrong results")
+
+				shape = Aegihelp.TextToShape(data)
+
+				line.comment = true
 				sub[li] = line
+				line.comment = false
+
+				line.text = line.text\match("%b{}")\gsub("\\an[%d%.%-]+", "")\gsub("\\fscx[%d%.%-]+", "")\gsub("\\fscy[%d%.%-]+", "")\gsub("}", "\\an7\\p1}")\gsub("\\fn[^\\]+", "") .. Aegihelp.ClipperToAegi(shape)
+				sub.insert(li + 1, line)
 
 			if res.others == "Move Shape"
-				shape = Yutils.shape.move(data.shape, res.horizontal, res.vertical)
-				line.text = line.text\match("%b{}") .. shape
+				if data.shape == nil
+					Aegihelp.Error("Shape missing")
+				shape = Aegihelp.Move(Aegihelp.AegiToClipper(data.shape), res.horizontal, res.vertical)
+				line.text = line.text\match("%b{}") .. Aegihelp.ClipperToAegi(shape)
 				sub[li] = line
 
 			if res.others == "Inner Shadow"
-				shape = nil
-				shadowline = line
-
-				if res.convert
-					shape = Aegihelp.TextToShape(data)
-					line.text = "{\\an7\\blur0\\bord0\\shad0\\fscx100\\fscy100\\pos(" .. data.pos.x .. "," .. data.pos.y .. ")\\p1}" .. shape
-					center = Aegihelp.FindCenter(shape)
-					shape = Yutils.shape.move(shape, -(tonumber(center.x)), -(tonumber(center.y)))
-				else
-					shape = data.shape
-				
-				cpr = Clipper!
-				cpr\AddPaths(Aegihelp.AegiToClipper(shape), ClipperLib.PolyType.ptSubject, true)
-				cpr\AddPaths(Aegihelp.AegiToClipper(Yutils.shape.move(shape, res.horizontal, res.vertical)), ClipperLib.PolyType.ptClip, true)
-
-				cpr\Execute(ClipperLib.ClipType.ctDifference, ft1, ft2)
-
-				shadowline.text = "{\\an7\\blur0\\bord0\\shad0\\fscx100\\fscy100\\pos(" .. data.pos.x .. "," .. data.pos.y .. ")\\p1}"
-				solution_paths = Aegihelp.ClipperToAegi(cpr.FinalSolution)
-				for i = 1, #solution_paths
-					shadowline.text = shadowline.text .. solution_paths[i]
-
-				sub.insert(li, shadowline)
+				if data.shape == nil
+					Aegihelp.Error("Shape missing")
 				sub[li] = line
 
+				line.layer += 1
+
+				cpr = Clipper!
+				shape = Aegihelp.AegiToClipper(data.shape)
+				cpr\AddPaths(shape, ClipperLib.PolyType.ptSubject, true)
+				cpr\AddPaths(Aegihelp.Move(shape, res.horizontal, res.vertical), ClipperLib.PolyType.ptClip, true)
+
+				cpr\Execute(ClipperLib.ClipType.ctDifference, ft, ft)
+
+				line.text = line.text\match("%b{}") .. Aegihelp.ClipperToAegi(cpr.FinalSolution)
+				sub.insert(li + 1, line)
+
 			if res.others == "Center Shape"
+				if data.shape == nil
+					Aegihelp.Error("Shape missing")
 				center = Aegihelp.FindCenter(data.shape)
-				shape = Yutils.shape.move(data.shape, -center.x, -center.y)
-				line.text = line.text\match("%b{}") .. shape
+				shape = Aegihelp.Move(Aegihelp.AegiToClipper(data.shape), -center.x, -center.y)
+				line.text = line.text\match("%b{}") .. Aegihelp.ClipperToAegi(shape)
 				sub[li] = line
 
 		if run == "Gradient"
@@ -4272,8 +4081,8 @@ Main = (sub, sel) ->
 			for i = 1, #perp_line
 				co = ClipperOffset(2, 0.25)
 				co\AddPaths(Aegihelp.AegiToClipper(perp_line[i]), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etOpenButt)
-				expanded_line = co\Execute(res.gradientsize / 2 + res.gradientsize)
-				table.insert(perp_lines_expanded, funzione(expanded_line))
+				co\Execute(res.gradientsize / 2 + res.gradientsize)
+				table.insert(perp_lines_expanded, funzione(co.FinalSolution))
 
 			--creazione colori
 			hex_to_dec = (str) ->
@@ -4382,17 +4191,14 @@ Main = (sub, sel) ->
 				cpr = Clipper!
 				cpr\AddPaths(Aegihelp.AegiToClipper(data.shape), ClipperLib.PolyType.ptSubject, true)
 				--cpr\AddPaths(Aegihelp.AegiToClipper(perp_lines_expanded[i]), ClipperLib.PolyType.ptClip, true)
-				cpr\AddPaths(Aegihelp.AegiToClipper(Yutils.shape.move(perp_lines_expanded[i], -data.pos.x, -data.pos.y)), ClipperLib.PolyType.ptClip, true)
+				cpr\AddPaths(Aegihelp.Move(Aegihelp.AegiToClipper(perp_lines_expanded[i]), -data.pos.x, -data.pos.y), ClipperLib.PolyType.ptClip, true)
 
-				cpr\Execute(ClipperLib.ClipType.ctIntersection, ft1, ft2)
+				cpr\Execute(ClipperLib.ClipType.ctIntersection, ft, ft)
 				solution_paths = Aegihelp.ClipperToAegi(cpr.FinalSolution)
 				gradline = line
 				gradline.text = line.text\match("%b{}")
-				gradline.text = gradline.text\gsub("\\i?clip%b()", "")
-				gradline.text = gradline.text\gsub("\\c&H......&", "")
-				gradline.text = gradline.text\gsub("{", "{" .. risultato_colori[i])
-				for i = 1, #solution_paths
-					gradline.text = gradline.text .. solution_paths[i]
+				gradline.text = gradline.text\gsub("\\i?clip%b()", "")\gsub("\\c&H......&", "")\gsub("{", "{" .. risultato_colori[i]) .. Aegihelp.ClipperToAegi(cpr.FinalSolution)
+				
 				if Aegihelp.GetLine(gradline).shape == nil
 					continue
 				sub.insert(li + i2 + #col, gradline)
@@ -4406,54 +4212,75 @@ Main = (sub, sel) ->
 				sub[li + i] = line
 			break
 
-ClipToShape = (sub, sel) ->
+Shapery.Help = ->
+	run, res = aegisub.dialog.display(GUI.help, {"Shapery", "Config", "Exit"}, {close: "Exit"})
+	if run == "Shapery"
+		Shapery.Main(SUBTITLES, SELECTED_LINE)
+	if run == "Config"
+		Shapery.Config!
+
+Shapery.Config = ->
+	run, res = aegisub.dialog.display(GUI.config, {"Shapery", "Help", "Exit"}, {close: "Exit"})
+	if run == "Shapery"
+		Shapery.Main(SUBTITLES, SELECTED_LINE)
+	if run == "Help"
+		Shapery.Help!
+
+Macros = {}
+
+Macros.ClipToShape = (sub, sel) ->
 	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
 		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
-		line.text = "{\\an7\\blur1\\bord0\\shad0\\fscx100\\fscy100\\pos(0,0)\\p1}" .. data.clip
+
+		if data.clip == nil
+			Aegihelp.Error("\\clip missing")
+
+		line.text = "{\\an7\\bord0\\shad0\\fscx100\\fscy100\\pos(0,0)\\p1}"\gsub("\\an7", "\\an7\\blur" .. data.blur) .. data.clip
+
 		sub[li] = line
 
-ShapeToClip = (sub, sel) ->
+Macros.ShapeToClip = (sub, sel) ->
 	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
 		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
+
+		if data.shape == nil
+			Aegihelp.Error("Shape missing")
+
 		if data.pos.x != 0 or data.pos.y != 0
-			data.shape = Yutils.shape.move(data.shape, data.pos.x, data.pos.y)
+			data.shape = Aegihelp.Move(Aegihelp.AegiToClipper(data.shape), data.pos.x, data.pos.y)
 		line.text = line.text\gsub("\\i?clip%b()", "")
-		line.text = line.text\gsub("}", "\\clip(" .. data.shape .. ")}")
+		line.text = line.text\gsub("}", "\\clip(" .. Aegihelp.ClipperToAegi(data.shape) .. ")}")
+
 		sub[li] = line
 
-Expand = (sub, sel) ->
+Macros.Expand = (sub, sel) ->
 	meta, styles = karaskel.collect_head sub, false
 	for si, li in ipairs(sel)
 		line = sub[li]
 		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
-		matrix = Matrix(Aegihelp.AegiToClipper(data.shape))
+
+		if data.shape == nil
+			Aegihelp.Error("There is nothing to expand")
+
 		if data.fax != 0 or data.fay != 0
-			matrix\Shear(data.fax, data.fay)
-			line.text = line.text\gsub("\\fax[%d%.%-]+", "")
-			line.text = line.text\gsub("\\fay[%d%.%-]+", "")
+			line.text = line.text\gsub("\\fax[%d%.%-]+", "")\gsub("\\fay[%d%.%-]+", "")
 		if data.xscale != 100 or data.yscale != 100
-			matrix\Scale(data.xscale, data.yscale, 100)
-			line.text = line.text\gsub("\\fscx[%d%.%-]+", "")
-			line.text = line.text\gsub("\\fscy[%d%.%-]+", "")
+			line.text = line.text\gsub("\\fscx[%d%.%-]+", "")\gsub("\\fscy[%d%.%-]+", "")
+		if data.frz != 0 or data.fry != 0 or data.frx != 0
+			line.text = line.text\gsub("\\frz[%d%.%-]+", "")\gsub("\\frx[%d%.%-]+", "")\gsub("\\fry[%d%.%-]+", "")
+		line.text = line.text\gsub("\\org%b()", "") if line.text\match("\\org%b()")
+		line.text = line.text\match("%b{}") .. Aegihelp.ClipperToAegi(Aegihelp.Expand(data))
 
-		matrix\Transform!
-
-		shape = Aegihelp.ClipperToAegi(matrix.result)
-		finalshape = ""
-		for i = 1, #shape
-			finalshape = finalshape .. shape[i]
-		line.text = line.text\match("%b{}")
-		line.text = line.text .. finalshape
 		sub[li] = line
 
-aegisub.register_macro(script_name, script_description, Main)
-aegisub.register_macro(": Shapery macros :/Clip To Shape", "Convert clip to shape", ClipToShape)
-aegisub.register_macro(": Shapery macros :/Shape To Clip", "Convert shape to clip", ShapeToClip)
-aegisub.register_macro(": Shapery macros :/Expand", "", Expand)
+aegisub.register_macro(script_name, script_description, Shapery.Main)
+aegisub.register_macro(": Shapery macros :/Clip To Shape", "Convert clip to shape", Macros.ClipToShape)
+aegisub.register_macro(": Shapery macros :/Shape To Clip", "Convert shape to clip", Macros.ShapeToClip)
+aegisub.register_macro(": Shapery macros :/Expand", "", Macros.Expand)

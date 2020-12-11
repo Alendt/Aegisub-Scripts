@@ -4226,13 +4226,13 @@ Shapery.Help = ->
 	if run == "Update"
 		if haveDepCtrl
 			macro = {
-				feed: "https://raw.githubusercontent.com/Alendt/test/main/DependencyControl.json"
+				feed: "https://raw.githubusercontent.com/Alendt/Aegisub-Scripts/master/DependencyControl.json"
 				version: script_version,
 				lastUpdateCheck: nil,
 				requiredModules: {},
 				namespace: script_namespace,
 				configFile: "",
-				channels: "main",
+				channels: "master",
 				lastChannel: "",
 				release: "",
 				name: "Shapery",

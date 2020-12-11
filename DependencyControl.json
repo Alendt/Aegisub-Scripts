@@ -1,0 +1,53 @@
+{
+  "dependencyControlFeedFormatVersion": "0.3.0",
+  "name": "Alen's Aegisub Scripts",
+  "description": "Main repository for Alen's automation macros.",
+  "maintainer": "Alen",
+  "knownFeeds": {},
+  "baseUrl": "https://github.com/Alendt/Aegisub-Scripts",
+  "fileBaseUrl": "https://raw.githubusercontent.com/Alendt/Aegisub-Scripts/@{channel}/macros/@{namespace}",
+  "url": "@{baseUrl}",
+
+  "macros": {
+    "alen.Shapery": {
+      "url": "@{baseUrl}#@{namespace}",
+      "author": "Alen",
+      "name": "Shapery",
+      "description": "Try to emulate the most used tools of Illustrator.",
+      "channels": {
+        "master": {
+          "version": "1.2.1",
+          "released": "2020-12-11",
+          "default": true,
+          "files": [
+            {
+              "name": ".moon",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "c3ecd050bf0411e3cdddf6ad8f196d8c35be32bf"
+            }
+          ],
+          "requiredModules": []
+        }
+      },
+      "changelog": {
+        "1.0.0": [
+          "Initial release."
+        ],
+        "1.1.0": [
+          "Fixed various Offsetting bug"
+        ],
+        "1.2.0": [
+          "-The Multiline option of Pathfinder now works even with different pos between lines.",
+          "-The Expand macro now works with more tags.",
+          "Read the documentation under Help inside the automation for all the info.",
+          "-Added some error log.",
+          "-Fixed a huge Offsetting bug that was causing wrong result when using value from 0.1 to 2.",
+          "-Converting the text to a shape now mantains the tags that can be later on expanded."
+        ],
+        "1.2.1": [
+          "Added DependencyControl"
+        ]
+      }
+    }
+  }
+}  

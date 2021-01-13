@@ -4274,13 +4274,20 @@ Macros.ShapeToClip = (sub, sel) ->
 		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 
-		if data.shape == nil
+		shape = data.shape
+		if shape == nil
 			Aegihelp.Error("Shape missing")
 
 		if data.pos.x != 0 or data.pos.y != 0
-			data.shape = Aegihelp.Move(Aegihelp.AegiToClipper(data.shape), data.pos.x, data.pos.y)
-		line.text = line.text\gsub("\\i?clip%b()", "")
-		line.text = line.text\gsub("}", "\\clip(" .. Aegihelp.ClipperToAegi(data.shape) .. ")}")
+			contour = Aegihelp.AegiToClipper(shape)
+			contour = Aegihelp.Move(contour, data.pos.x, data.pos.y)
+			shape = Aegihelp.ClipperToAegi(contour)
+
+		-- don't match clips containing commas
+		-- a clip with commas is a rectangular clip
+		-- we don't want to overwrite rectangular clips
+		line.text = line.text\gsub("\\i?clip%([^),]*%)", "")
+		line.text = line.text\gsub("}", "\\clip(#{shape})}")
 
 		sub[li] = line
 

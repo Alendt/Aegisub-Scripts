@@ -4118,56 +4118,6 @@ Shapery.Main = (sub, sel) ->
 				table.insert(perp_lines_expanded, segment_clip)
 
 			--creazione colori
-			hex_to_dec = (str) ->
-				a, b = str\match("(.)(.)")
-				switch a
-					when "A" or "a"
-						a = 10
-					when "B" or "b"
-						a = 11
-					when "C" or "c"
-						a = 12
-					when "D" or "d"
-						a = 13
-					when "E" or "e"
-						a = 14
-					when "F" or "f"
-						a = 15
-					else
-						a = tonumber(a)
-
-				switch b
-					when "A" or "a"
-						b = 10 
-					when "B" or "b"
-						b = 11
-					when "C" or "c"
-						b = 12
-					when "D" or "d"
-						b = 13
-					when "E" or "e"
-						b = 14
-					when "F" or "f"
-						b = 15
-					else
-						b = tonumber(b)
-
-				a = a * 16
-				b = b * 1
-				return a + b
-
-			dec_to_hex = (num) ->
-				hexval = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"}
-				a = num / 16
-				b = (a - math.floor(a)) * 16
-
-				a = hexval[math.floor(a)]
-				b = hexval[b]
-				if a == nil then a = 0
-				if b == nil then b = 0
-				return tostring(a) .. tostring(b)
-
-
 			class RGB
 				new: (r, g, b) =>
 					@r = r or 0
@@ -4175,35 +4125,39 @@ Shapery.Main = (sub, sel) ->
 					@b = b or 0
 
 			interpolate = (start_c, end_c, num, result) ->
+				b2s = (b) -> if b then 1 else -1
+
 				red = math.abs(start_c.r - end_c.r) / (num - 2)
-				invert_red = false if start_c.r < end_c.r else true
+				invert_red = b2s(start_c.r <= end_c.r)
 
 				green = math.abs(start_c.g - end_c.g) / (num - 2)
-				invert_green = false if start_c.g < end_c.g else true
+				invert_green = b2s(start_c.g <= end_c.g)
 
 				blue = math.abs(start_c.b - end_c.b) / (num - 2)
-				invert_blue = false if start_c.b < end_c.b else true
+				invert_blue = b2s(start_c.b <= end_c.b)
 
 				current_c = RGB()
 				for i = 1, num
 					if i == 1
-						current_c = RGB(start_c.r, start_c.g, start_c.b)
+						current_c = start_c
 					elseif i == num
-						current_c = RGB(end_c.r, end_c.g, end_c.b)
+						current_c = end_c
 					else
-						current_c = RGB(invert_red == false and current_c.r + red or current_c.r - red, invert_green == false and current_c.g + green or current_c.g - green, invert_blue == false and current_c.b + blue or current_c.b - blue)
+						current_c.r += red * invert_red
+						current_c.g += green * invert_green
+						current_c.b += blue * invert_blue
 
-					table.insert(result, "\\c&H" .. dec_to_hex(Round(current_c.b, 0)) .. dec_to_hex(Round(current_c.g, 0)) .. dec_to_hex(Round(current_c.r, 0)) .. "&")
+					color_string = ass_color(current_c.r, current_c.g, current_c.b)
+					table.insert(result, "\\c" .. color_string)
 
 				return result
 
 			col = {}
 			for i = 0, #sel - 1
 				clrline = sub[li + i]
-				blue = clrline.text\match("^{[^}]-\\c&H(..)....&") or "FF"
-				green = clrline.text\match("^{[^}]-\\c&H..(..)..&") or "FF"
-				red = clrline.text\match("^{[^}]-\\c&H....(..)&") or "FF"
-				table.insert(col, RGB(hex_to_dec(red), hex_to_dec(green), hex_to_dec(blue)))
+				color_string = clrline.text\match("^{[^}]-\\c([^})\\]+)") or "&HFFFFFF&"
+				r, g, b = extract_color color_string
+				table.insert(col, RGB(r, g, b))
 
 			lines_per_color = Round(#perp_lines_expanded / (#col - 1), 0)
 			risultato_colori = {}

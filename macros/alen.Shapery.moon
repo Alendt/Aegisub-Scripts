@@ -3867,6 +3867,7 @@ GUI = {
 
 		{class: "label", label: "Gradient Step (2 min)", x: 6, y: 6},
 		{class: "floatedit", name: "gradientsize", x: 6, y: 7, width: 1, height: 1, hint: "Gradient size", value: 2},
+		{class: "checkbox", label: "Continue gradient", name: "extendgradient", value: false, x: 6, y: 8, width: 1, height: 1},
 
 		{class: "label", label: "ver: " .. script_version, x: 7, y: 9}
 	},
@@ -4040,7 +4041,13 @@ Shapery.Main = (sub, sel) ->
 						table.insert(points, {Round(x0 + rel_x * pct, 2), Round(y0 + rel_y * pct, 2)})
 						cur_distance += max_len
 
-					return points
+					extreme_val = 65536
+					extremes = {
+						{x: rel_x * -extreme_val, y: rel_y * -extreme_val},
+						{x: rel_x * extreme_val, y: rel_y * extreme_val},
+					}
+
+					return points, extremes
 
 			find_perpendicular_points = (p1, p2, distance) ->
 				x1, y1, x2, y2 = p1[1], p1[2], p2[1], p2[2]
@@ -4054,27 +4061,44 @@ Shapery.Main = (sub, sel) ->
 
 				U = {x: -dy / L, y: dx / L}
 
-				x = Round(mx + U.x * distance, 4)
-				y = Round(my + U.y * distance, 4)
-				xx = Round(mx - U.x * distance, 4)
-				yy = Round(my - U.y * distance, 4)
+				x = mx + U.x * distance
+				y = my + U.y * distance
+				xx = mx - U.x * distance
+				yy = my - U.y * distance
 				
-				toreturn = "m " .. x .. " " .. y .. " l " .. xx .. " " .. yy
-				return toreturn
+				return {{:x, :y}, {x:xx, y:yy}}
 
-			funzione = (a) ->
-				str = ""
-				for i = 1, #a
-					str = str .. "m "
-					for j = 1, #a[i]
-						if j == 2
-							str = str .. "l " .. tostring(a[i][j].X) .. " " .. tostring(a[i][j].Y) .. " "
-						else
-							str = str .. tostring(a[i][j].X) .. " " .. tostring(a[i][j].Y) .. " "
+			make_gradient_seg = (p, radius, extreme_a, extreme_b) ->
+				radius = math.abs(radius)
+				p1, p2 = p[1], p[2]
+				dy = p2.y - p1.y
+				dx = p2.x - p1.x
+				angle = math.atan2 dy, dx
+				perp_angle = angle + math.pi / 2
+				ox = radius * math.cos perp_angle
+				oy = radius * math.sin perp_angle
 
-				return str
+				p1a = {x: p1.x - ox, y: p1.y - oy}
+				p1b = {x: p1.x + ox, y: p1.y + oy}
+				p2a = {x: p2.x - ox, y: p2.y - oy}
+				p2b = {x: p2.x + ox, y: p2.y + oy}
 
-			split = split_line(Aegihelp.GetLine(line).clip)--data.clip)
+				if extreme_a != nil
+					p1a = extreme_a
+					p2a = extreme_a
+				if extreme_b != nil
+					p1b = extreme_b
+					p2b = extreme_b
+
+				return string.format(
+					"m %f %f l %f %f %f %f %f %f",
+					Round(p1a.x, 4), Round(p1a.y, 4),
+					Round(p1b.x, 4), Round(p1b.y, 4),
+					Round(p2b.x, 4), Round(p2b.y, 4),
+					Round(p2a.x, 4), Round(p2a.y, 4)
+				)
+
+			split, extremes = split_line(Aegihelp.GetLine(line).clip)--data.clip)
 
 			perp_line = {}
 			for i = 1, #split - 1
@@ -4083,11 +4107,15 @@ Shapery.Main = (sub, sel) ->
 			if res.gradientsize <= 1 then res.gradientsize = 1
 
 			perp_lines_expanded = {}
-			for i = 1, #perp_line
-				co = ClipperOffset(2, 0.25)
-				co\AddPaths(Aegihelp.AegiToClipper(perp_line[i]), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etOpenButt)
-				co\Execute(res.gradientsize / 2 + res.gradientsize)
-				table.insert(perp_lines_expanded, funzione(co.FinalSolution))
+			for i, line in ipairs perp_line
+				local extreme_a, extreme_b
+				if res.extendgradient
+					if i == 1
+						extreme_a = extremes[1]
+					if i == #perp_line
+						extreme_b = extremes[2]
+				segment_clip = make_gradient_seg line, res.gradientsize * 1.5, extreme_a, extreme_b
+				table.insert(perp_lines_expanded, segment_clip)
 
 			--creazione colori
 			hex_to_dec = (str) ->

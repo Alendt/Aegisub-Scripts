@@ -48,7 +48,7 @@
           "Added DependencyControl"
         ],
         "1.2.2": [
-          "Fixed the last known bug of pathfinder"
+          "Fixed the last known bug of pathfinder",
           "Simplified the color-handling code for gradients. (Thanks to The0x539)"
         ]
       }

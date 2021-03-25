@@ -3867,6 +3867,7 @@ GUI = {
 
 		{class: "label", label: "Gradient Step (2 min)", x: 6, y: 6},
 		{class: "floatedit", name: "gradientsize", x: 6, y: 7, width: 1, height: 1, hint: "Gradient size", value: 2},
+		{class: "checkbox", label: "Continue gradient", name: "extendgradient", value: false, x: 6, y: 8, width: 1, height: 1},
 
 		{class: "label", label: "ver: " .. script_version, x: 7, y: 9}
 	},
@@ -4040,7 +4041,13 @@ Shapery.Main = (sub, sel) ->
 						table.insert(points, {Round(x0 + rel_x * pct, 2), Round(y0 + rel_y * pct, 2)})
 						cur_distance += max_len
 
-					return points
+					extreme_val = 65536
+					extremes = {
+						{x: rel_x * -extreme_val, y: rel_y * -extreme_val},
+						{x: rel_x * extreme_val, y: rel_y * extreme_val},
+					}
+
+					return points, extremes
 
 			find_perpendicular_points = (p1, p2, distance) ->
 				x1, y1, x2, y2 = p1[1], p1[2], p2[1], p2[2]
@@ -4054,27 +4061,44 @@ Shapery.Main = (sub, sel) ->
 
 				U = {x: -dy / L, y: dx / L}
 
-				x = Round(mx + U.x * distance, 4)
-				y = Round(my + U.y * distance, 4)
-				xx = Round(mx - U.x * distance, 4)
-				yy = Round(my - U.y * distance, 4)
+				x = mx + U.x * distance
+				y = my + U.y * distance
+				xx = mx - U.x * distance
+				yy = my - U.y * distance
 				
-				toreturn = "m " .. x .. " " .. y .. " l " .. xx .. " " .. yy
-				return toreturn
+				return {{:x, :y}, {x:xx, y:yy}}
 
-			funzione = (a) ->
-				str = ""
-				for i = 1, #a
-					str = str .. "m "
-					for j = 1, #a[i]
-						if j == 2
-							str = str .. "l " .. tostring(a[i][j].X) .. " " .. tostring(a[i][j].Y) .. " "
-						else
-							str = str .. tostring(a[i][j].X) .. " " .. tostring(a[i][j].Y) .. " "
+			make_gradient_seg = (p, radius, extreme_a, extreme_b) ->
+				radius = math.abs(radius)
+				p1, p2 = p[1], p[2]
+				dy = p2.y - p1.y
+				dx = p2.x - p1.x
+				angle = math.atan2 dy, dx
+				perp_angle = angle + math.pi / 2
+				ox = radius * math.cos perp_angle
+				oy = radius * math.sin perp_angle
 
-				return str
+				p1a = {x: p1.x - ox, y: p1.y - oy}
+				p1b = {x: p1.x + ox, y: p1.y + oy}
+				p2a = {x: p2.x - ox, y: p2.y - oy}
+				p2b = {x: p2.x + ox, y: p2.y + oy}
 
-			split = split_line(Aegihelp.GetLine(line).clip)--data.clip)
+				if extreme_a != nil
+					p1a = extreme_a
+					p2a = extreme_a
+				if extreme_b != nil
+					p1b = extreme_b
+					p2b = extreme_b
+
+				return string.format(
+					"m %f %f l %f %f %f %f %f %f",
+					Round(p1a.x, 4), Round(p1a.y, 4),
+					Round(p1b.x, 4), Round(p1b.y, 4),
+					Round(p2b.x, 4), Round(p2b.y, 4),
+					Round(p2a.x, 4), Round(p2a.y, 4)
+				)
+
+			split, extremes = split_line(Aegihelp.GetLine(line).clip)--data.clip)
 
 			perp_line = {}
 			for i = 1, #split - 1
@@ -4083,63 +4107,17 @@ Shapery.Main = (sub, sel) ->
 			if res.gradientsize <= 1 then res.gradientsize = 1
 
 			perp_lines_expanded = {}
-			for i = 1, #perp_line
-				co = ClipperOffset(2, 0.25)
-				co\AddPaths(Aegihelp.AegiToClipper(perp_line[i]), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etOpenButt)
-				co\Execute(res.gradientsize / 2 + res.gradientsize)
-				table.insert(perp_lines_expanded, funzione(co.FinalSolution))
+			for i, line in ipairs perp_line
+				local extreme_a, extreme_b
+				if res.extendgradient
+					if i == 1
+						extreme_a = extremes[1]
+					if i == #perp_line
+						extreme_b = extremes[2]
+				segment_clip = make_gradient_seg line, res.gradientsize * 1.5, extreme_a, extreme_b
+				table.insert(perp_lines_expanded, segment_clip)
 
 			--creazione colori
-			hex_to_dec = (str) ->
-				a, b = str\match("(.)(.)")
-				switch a
-					when "A" or "a"
-						a = 10
-					when "B" or "b"
-						a = 11
-					when "C" or "c"
-						a = 12
-					when "D" or "d"
-						a = 13
-					when "E" or "e"
-						a = 14
-					when "F" or "f"
-						a = 15
-					else
-						a = tonumber(a)
-
-				switch b
-					when "A" or "a"
-						b = 10 
-					when "B" or "b"
-						b = 11
-					when "C" or "c"
-						b = 12
-					when "D" or "d"
-						b = 13
-					when "E" or "e"
-						b = 14
-					when "F" or "f"
-						b = 15
-					else
-						b = tonumber(b)
-
-				a = a * 16
-				b = b * 1
-				return a + b
-
-			dec_to_hex = (num) ->
-				hexval = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"}
-				a = num / 16
-				b = (a - math.floor(a)) * 16
-
-				a = hexval[math.floor(a)]
-				b = hexval[b]
-				if a == nil then a = 0
-				if b == nil then b = 0
-				return tostring(a) .. tostring(b)
-
-
 			class RGB
 				new: (r, g, b) =>
 					@r = r or 0
@@ -4147,35 +4125,39 @@ Shapery.Main = (sub, sel) ->
 					@b = b or 0
 
 			interpolate = (start_c, end_c, num, result) ->
+				b2s = (b) -> if b then 1 else -1
+
 				red = math.abs(start_c.r - end_c.r) / (num - 2)
-				invert_red = false if start_c.r < end_c.r else true
+				invert_red = b2s(start_c.r <= end_c.r)
 
 				green = math.abs(start_c.g - end_c.g) / (num - 2)
-				invert_green = false if start_c.g < end_c.g else true
+				invert_green = b2s(start_c.g <= end_c.g)
 
 				blue = math.abs(start_c.b - end_c.b) / (num - 2)
-				invert_blue = false if start_c.b < end_c.b else true
+				invert_blue = b2s(start_c.b <= end_c.b)
 
 				current_c = RGB()
 				for i = 1, num
 					if i == 1
-						current_c = RGB(start_c.r, start_c.g, start_c.b)
+						current_c = start_c
 					elseif i == num
-						current_c = RGB(end_c.r, end_c.g, end_c.b)
+						current_c = end_c
 					else
-						current_c = RGB(invert_red == false and current_c.r + red or current_c.r - red, invert_green == false and current_c.g + green or current_c.g - green, invert_blue == false and current_c.b + blue or current_c.b - blue)
+						current_c.r += red * invert_red
+						current_c.g += green * invert_green
+						current_c.b += blue * invert_blue
 
-					table.insert(result, "\\c&H" .. dec_to_hex(Round(current_c.b, 0)) .. dec_to_hex(Round(current_c.g, 0)) .. dec_to_hex(Round(current_c.r, 0)) .. "&")
+					color_string = ass_color(current_c.r, current_c.g, current_c.b)
+					table.insert(result, "\\c" .. color_string)
 
 				return result
 
 			col = {}
 			for i = 0, #sel - 1
 				clrline = sub[li + i]
-				blue = clrline.text\match("^{[^}]-\\c&H(..)....&") or "FF"
-				green = clrline.text\match("^{[^}]-\\c&H..(..)..&") or "FF"
-				red = clrline.text\match("^{[^}]-\\c&H....(..)&") or "FF"
-				table.insert(col, RGB(hex_to_dec(red), hex_to_dec(green), hex_to_dec(blue)))
+				color_string = clrline.text\match("^{[^}]-\\c([^})\\]+)") or "&HFFFFFF&"
+				r, g, b = extract_color color_string
+				table.insert(col, RGB(r, g, b))
 
 			lines_per_color = Round(#perp_lines_expanded / (#col - 1), 0)
 			risultato_colori = {}
@@ -4274,13 +4256,20 @@ Macros.ShapeToClip = (sub, sel) ->
 		karaskel.preproc_line sub, meta, styles, line
 		data = Aegihelp.GetLine(line)
 
-		if data.shape == nil
+		shape = data.shape
+		if shape == nil
 			Aegihelp.Error("Shape missing")
 
 		if data.pos.x != 0 or data.pos.y != 0
-			data.shape = Aegihelp.Move(Aegihelp.AegiToClipper(data.shape), data.pos.x, data.pos.y)
-		line.text = line.text\gsub("\\i?clip%b()", "")
-		line.text = line.text\gsub("}", "\\clip(" .. Aegihelp.ClipperToAegi(data.shape) .. ")}")
+			contour = Aegihelp.AegiToClipper(shape)
+			contour = Aegihelp.Move(contour, data.pos.x, data.pos.y)
+			shape = Aegihelp.ClipperToAegi(contour)
+
+		-- don't match clips containing commas
+		-- a clip with commas is a rectangular clip
+		-- we don't want to overwrite rectangular clips
+		line.text = line.text\gsub("\\i?clip%([^),]*%)", "")
+		line.text = line.text\gsub("}", "\\clip(#{shape})}")
 
 		sub[li] = line
 

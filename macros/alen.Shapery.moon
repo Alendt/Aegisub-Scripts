@@ -322,15 +322,6 @@ class IntersectNode
 		@Edge2 = nil
 		@Pt = Point!
 
-ClipperLib.MyIntersectNodeSort.Compare = (node1, node2) ->
-	i = node2.Pt.Y - node1.Pt.Y
-	if i > 0
-		return 1
-	elseif i < 0
-		return -1
-	else
-		return 0
-
 class LocalMinima
 	new: =>
 		@Y = 0
@@ -1099,7 +1090,6 @@ class Clipper extends ClipperBase
 		@m_ActiveEdges = nil
 		@m_SortedEdges = nil
 		@m_IntersectList = {}
-		@m_IntersectNodeComparer = ClipperLib.MyIntersectNodeSort.Compare
 		@m_ExecuteLocked = false
 		@m_PolyOuts = {}
 		@m_Joins = {}
@@ -1173,7 +1163,6 @@ class Clipper extends ClipperBase
 		outRec.FirstLeft = orfl
 
 	ExecuteInternal: =>
-		--try
 		@Reset!
 		@m_SortedEdges = nil
 		@m_Maxima = nil
@@ -1218,11 +1207,9 @@ class Clipper extends ClipperBase
 		if @StrictlySimple
 			@DoSimplePolygons!
 
-
-		--finally
 		@m_Joins = {}
 		@m_GhostJoins = {}
-		return true --questo true è prima di finally, funziona uguale?
+		return true
 
 	DisposeAllPolyPts: =>
 		for i = 1, #@m_PolyOuts
@@ -2512,7 +2499,10 @@ class Clipper extends ClipperBase
 		--Now it's crucial that intersections are made only between adjacent edges,
 		--so to ensure this the order of intersections may need adjusting ...
 
-		--table.sort(@m_IntersectList, @m_IntersectNodeComparer)
+		Compare = (node1, node2) ->
+			i = node2.Pt.Y - node1.Pt.Y
+			return i < 0
+		table.sort(@m_IntersectList, Compare)
 		
 		@CopyAELToSEL!
 		cnt = #@m_IntersectList
@@ -4220,7 +4210,7 @@ Shapery.Help = ->
 				name: "Shapery",
 				author: "Alen"
 			}
-			task, err = DependencyControl.updater\addTask macro, nil, nil, exhaustive, macro.channels
+			task, err = DependencyControl.updater\addTask macro, nil, nil, false, macro.channels
 			if task then task\run!
 			else logger\log err
 		else

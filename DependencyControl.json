@@ -16,14 +16,14 @@
       "description": "Try to emulate the most used tools of Illustrator.",
       "channels": {
         "master": {
-          "version": "1.2.1",
-          "released": "2020-12-11",
+          "version": "1.2.2",
+          "released": "2021-03-25",
           "default": true,
           "files": [
             {
               "name": ".moon",
               "url": "@{fileBaseUrl}@{fileName}",
-              "sha1": "de46eb81eea09bc02c8e08681b31c969654765a9"
+              "sha1": "8174af472ff087a6dc961f4a4d4632679784c95e"
             }
           ],
           "requiredModules": []
@@ -46,6 +46,10 @@
         ],
         "1.2.1": [
           "Added DependencyControl"
+        ],
+        "1.2.2": [
+          "Fixed the last known bug of pathfinder"
+          "Simplified the color-handling code for gradients. (Thanks to The0x539)"
         ]
       }
     }

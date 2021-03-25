@@ -1,7 +1,7 @@
 export script_name = "Shapery"
 export script_description = "Try to emulate the most used tools of Illustrator."
 export script_author = "Alen"
-export script_version = "1.2.1"
+export script_version = "1.2.2"
 export script_namespace = "alen.Shapery"
 
 Helptext = "====== Comment and credits ======

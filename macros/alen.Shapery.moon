@@ -3629,25 +3629,19 @@ Aegihelp.AegiToClipper = (clip) ->
 
 	return coord
 
-Aegihelp.ClipperToAegi = (a) ->
-	strs = {}
-	str = ""
-	for i = 1, #a
-		str = str .. "m "
-		for j = 1, #a[i]
-			if j == 2
-				str = str .. "l " .. Round(a[i][j].X) .. " " .. Round(a[i][j].Y) .. " "
-			else
-				str = str .. Round(a[i][j].X) .. " " .. Round(a[i][j].Y) .. " "
+Aegihelp.ClipperToAegi = (shapes) ->
+	contours = {}
+	for i, shape in ipairs shapes
+		cmds = {}
+		for j, point in ipairs shape
+			fmt = switch j
+				when 1 then 'm %.2f %.2f'
+				when 2 then 'l %.2f %.2f'
+				else '%.2f %.2f'
 
-		table.insert(strs, str)
-		str = ""
-
-	str = ""
-	for i = 1, #strs
-		str = str .. strs[i]
-
-	return str
+			table.insert cmds, fmt\format(point.X, point.Y)
+		table.insert contours, table.concat(cmds, ' ')
+	return table.concat contours, ' '
 
 Aegihelp.Move = (shape, horizontal, vertical) ->
 	for i = 1, #shape

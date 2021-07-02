@@ -3757,6 +3757,30 @@ Aegihelp.FindCenter = (shape) ->
 
 	return {x: ((topX - bottomX) / 2) + bottomX, y: ((topY - bottomY) / 2) + bottomY}
 
+Aegihelp._3DShadow = (shape, sx = 0, sy = 0) ->
+	nx, ny = math.abs(sx), math.abs(sy) -- gets the absolute value of the axis
+	-- if you don't have the aegisub folder XD
+	ipol = interpolate or (t, a, b) -> a + (b - a) * t
+
+	points = Aegihelp.AegiToClipper(shape)
+	path = Yutils.table.copy(points) -- copy path for next loop
+	pack = {}
+
+	for y = 1, nx == ny and 1 or (ny == 0 and 1 or (ny < nx) and 1 or ny)
+		pcty = (y - 1) / (ny - 1) -- yt value --> 0 .. 1
+		for x = 1, nx == 0 and 1 or (nx < ny) and 1 or nx
+			path = Yutils.table.copy(points) -- copy path for next loop
+			pctx = (x - 1) / (nx - 1) -- xt value --> 0 .. 1
+			ipox = ipol(nx < ny and pcty or pctx, 0, sx)
+			ipoy = nx == ny and ipox or ipol(nx < ny and pcty or pctx, 0, sy)
+			pack[#pack + 1] = Aegihelp.ClipperToAegi(Aegihelp.Move(path, ipox, ipoy))
+
+	pack = table.concat(pack) -- concat all parts
+	pack = ClipperLib.Clipper.SimplifyPolygons(Aegihelp.AegiToClipper(pack), ClipperLib.Clipper.pftNonZero) -- simplify
+	-- optional - leaves only the 3Dshadow part
+
+	return Aegihelp.ClipperToAegi(pack)
+
 Aegihelp.Expand = (data) ->
 	points = data.shape
 
@@ -3841,7 +3865,7 @@ GUI = {
 
 
 		{class: "label", label: "Others", x: 6, y: 0},
-		{class: "dropdown", name: "others", value: "Text to Shape", items: {"Text to Shape", "Move Shape", "Inner Shadow", "Center Shape"}, x: 6, y: 1},
+		{class: "dropdown", name: "others", value: "Text to Shape", items: {"Text to Shape", "Move Shape", "Inner Shadow", "Center Shape", "3D Shadow"}, x: 6, y: 1},
 		{class: "checkbox", label: "Convert", name: "convert", value: false, x: 6, y: 2, width: 1, height: 1},
 		{class: "label", label: "Horizontal:", x: 7, y: 0},
 		{class: "floatedit", name: "horizontal", x: 7, y: 1, width: 1, height: 1},
@@ -4005,6 +4029,32 @@ Shapery.Main = (sub, sel) ->
 				center = Aegihelp.FindCenter(data.shape)
 				shape = Aegihelp.Move(Aegihelp.AegiToClipper(data.shape), -center.x, -center.y)
 				line.text = line.text\match("%b{}") .. Aegihelp.ClipperToAegi(shape)
+				sub[li] = line
+
+			if res.others == "3D Shadow"
+				_tags = line.text\match "%b{}" -- get tags
+				-- caps shadow types
+				_bord = _tags\match "\\shad%s*(%d[%.%d]*)"
+				xbord = _tags\match "\\xshad%s*(%-?%d[%.%d]*)"
+				ybord = _tags\match "\\yshad%s*(%-?%d[%.%d]*)"
+				shape = data.shape
+
+				if _bord
+					shape = Aegihelp._3DShadow(shape, tonumber(_bord), tonumber(_bord))
+				else
+					if xbord and ybord
+						shape = Aegihelp._3DShadow(shape, tonumber(xbord), tonumber(ybord))
+					elseif xbord and not ybord
+						shape = Aegihelp._3DShadow(shape, tonumber(xbord), nil)
+					elseif not xbord and ybord
+						shape = Aegihelp._3DShadow(shape, nil, tonumber(ybord))
+					else
+						Aegihelp.Error("Not have shadow values")
+
+				_tags = _tags\gsub "\\[xy]*shad%s*%-?%d[%.%d]*", "" -- remove shadows
+				_tags = _tags\gsub "{(.-)}", "{%1" .. "\\shad0}" -- avoids duplication of the shad0
+
+				line.text = _tags .. shape
 				sub[li] = line
 
 		if run == "Gradient"

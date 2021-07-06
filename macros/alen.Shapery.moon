@@ -30,8 +30,8 @@ The checkbox 'Multiline' allow for more lines to be selected, the script will us
 
 ====== Offsetting ======
 Inflating and deflating polygons.
-The angles can have 3 style: miter, round and square.
-The arc tolerance define the precision a curve will have if the style Round is used.
+The angles can have 3 styles: miter, round and square.
+The arc tolerance defines the precision a curve will have if the style Round is used.
 
 ====== Others ======
 -Text to shape

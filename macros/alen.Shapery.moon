@@ -3692,30 +3692,32 @@ Aegihelp.GetLine = (line) ->
 	return {
 		:clip
 		:shape
-		family:    getStr  'fn',   style.fontname
-		bold:      getBool 'b',    style.bold
-		italic:    getBool 'i',    style.italic
-		underline: getBool 'u',    style.underline
-		strikeout: getBool 's',    style.strikeout
-		size:      getNum  'fs',   style.fontsize
-		xscale:    getNum  'fscx', style.scale_x
-		yscale:    getNum  'fscy', style.scale_y
-		hspace:    getNum  'fsp',  style.spacing
-		frx:       getNum  'frx',  0
-		fry:       getNum  'fry',  0
-		frz:       getNum  'frz',  style.angle
-		fax:       getNum  'fax',  0
-		fay:       getNum  'fay',  0
-		shad:      getNum  'shad', style.shadow
-		bord:      getNum  'bord', style.outline
-		blur:      getNum  'blur', 1
+		family:    getStr  'fn',    style.fontname
+		bold:      getBool 'b',     style.bold
+		italic:    getBool 'i',     style.italic
+		underline: getBool 'u',     style.underline
+		strikeout: getBool 's',     style.strikeout
+		size:      getNum  'fs',    style.fontsize
+		xscale:    getNum  'fscx',  style.scale_x
+		yscale:    getNum  'fscy',  style.scale_y
+		hspace:    getNum  'fsp',   style.spacing
+		frx:       getNum  'frx',   0
+		fry:       getNum  'fry',   0
+		frz:       getNum  'frz',   style.angle
+		fax:       getNum  'fax',   0
+		fay:       getNum  'fay',   0
+		shad:      getNum  'shad',  style.shadow
+		xshad:     getNum  'xshad', 0
+		yshad:     getNum  'yshad', 0
+		bord:      getNum  'bord',  style.outline
+		blur:      getNum  'blur',  1
 		text: words
 		pos: {:x, :y}
 		org: {x:org_x, y:org_y}
-		color1:    getCol  'c',    style.color1
-		color2:    getCol  '2c',   style.color2
-		color3:    getCol  '3c',   style.color3
-		color4:    getCol  '4c',   style.color4
+		color1:    getCol  'c',     style.color1
+		color2:    getCol  '2c',    style.color2
+		color3:    getCol  '3c',    style.color3
+		color4:    getCol  '4c',    style.color4
 	}
 
 Aegihelp.TextToShape = (data) ->
@@ -3804,8 +3806,19 @@ Aegihelp.Expand = (data) ->
 
 	fax = data.fax * data.xscale / data.yscale
 	fay = data.fay * data.yscale / data.xscale
-	x1 = {1, fax, data.pos.x - data.org.x}
-	y1 = {fay, 1, data.pos.y - data.org.y}
+
+	wx = data.shad
+	wy = data.shad
+	if data.xshad != 0 and data.yshad == 0
+		wx = data.xshad
+	elseif data.xshad == 0 and data.yshad != 0
+		wy = data.yshad
+	elseif data.xshad != 0 and data.yshad != 0
+		wx = data.xshad
+		wy = data.yshad
+
+	x1 = {1, fax, data.pos.x - data.org.x + wx}
+	y1 = {fay, 1, data.pos.y - data.org.y + wy}
 
 	x2, y2 = {}, {}
 	for i = 1, 3
@@ -3825,8 +3838,8 @@ Aegihelp.Expand = (data) ->
 	dist = 312.5
 	z4[3] += dist
 
-	offs_x = data.org.x - data.pos.x
-	offs_y = data.org.y - data.pos.y
+	offs_x = data.org.x - data.pos.x - wx
+	offs_y = data.org.y - data.pos.y - wy
 
 	m = {}
 	m[1], m[2], m[3] = {}, {}, {}

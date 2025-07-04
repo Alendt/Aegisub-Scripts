@@ -1,15 +1,16 @@
 export script_name        = "Font Manager"
 export script_description = "Manage your fonts without leaving Aegisub"
-export script_version     = "0.0.1"
+export script_version     = "0.0.2"
 
 local ILL, Ass, Line
 ILL = require "ILL.ILL"
 {:Line, :Ass} = ILL
-
+json = require "json"
 ffi = require "ffi"
 import C, cast, cdef, new from ffi
 
---
+comctl32 = ffi.load "comctl32"
+
 WM_COMMAND = 0x0111
 WM_HSCROLL = 0x0114
 WM_DRAWITEM = 0x002B
@@ -54,8 +55,22 @@ WS_EX_CLIENTEDGE = 0x00000200
 WM_KEYDOWN = 0x0100
 VK_ESCAPE = 0x1B
 VK_RETURN = 0x0D
-
 COLOR_HIGHLIGHT = 13
+WM_CLOSE = 0x0010
+MB_OK = 0x00000000
+MB_OKCANCEL = 0x00000001
+MB_ICONERROR = 0x00000010
+IDOK = 1
+IDCANCEL = 2
+ADD_CATEGORY_EDIT = 1016
+ADD_CATEGORY_OK = 1017
+ADD_CATEGORY_CANCEL = 1018
+ADD_TO_CATEGORY_OK = 1019
+ADD_TO_CATEGORY_CANCEL = 1020
+LB_GETTOPINDEX = 0x018E
+LB_SETTOPINDEX = 0x0197
+SS_LEFT = 0x0000
+LOG_LABEL = 1021
 
 cdef [[
     typedef void* HWND;
@@ -198,6 +213,8 @@ cdef [[
     LRESULT SendMessageW(HWND, UINT, uintptr_t, uintptr_t);
     int GetTextMetricsA(HDC, TEXTMETRIC*);
     unsigned long GetSysColor(int nIndex);
+    int MessageBoxA(HWND, const char*, const char*, UINT);
+    HWND SetFocus(HWND);
 ]]
 
 dialog_ok = false
@@ -212,6 +229,12 @@ className = "AegisubFontWindowClass"
 fonts = {}
 sizeLabel = nil
 fontFamilies = {}
+categories = {}
+currentCategory = ""
+isAddingToCategory = false
+categoryFile = aegisub.decode_path "?user\\fontmanager.json"
+logMessage = ""
+logMessageTimer = 0
 
 MAKELONG = (low, high) ->
     return (high * 65536) + low
@@ -238,6 +261,64 @@ wideToString = (wStr, wLen) ->
     if C.WideCharToMultiByte(65001, 0, wStr, wLen, cStr, len, nil, nil) == 0
         return ""
     return ffi.string(cStr, len)
+
+showLogMessage = (hwnd, message) ->
+    logMessage = message
+    logMessageTimer = os.time! + 3
+    logLabel = C.GetDlgItem hwnd, LOG_LABEL
+    if logLabel
+        cMessage = ffi.new "char[?]", #logMessage + 1, logMessage
+        C.SendMessageA logLabel, 0x000C, 0, ffi.cast("uintptr_t", cMessage)
+        C.InvalidateRect logLabel, nil, 1
+
+updateLogMessage = (hwnd) ->
+    if logMessageTimer > 0 and os.time! >= logMessageTimer
+        logMessage = ""
+        logMessageTimer = 0
+        logLabel = C.GetDlgItem hwnd, LOG_LABEL
+        if logLabel
+            cMessage = ffi.new "char[?]", 1, ""
+            C.SendMessageA logLabel, 0x000C, 0, ffi.cast("uintptr_t", cMessage)
+            C.InvalidateRect logLabel, nil, 1
+
+loadCategories = ->
+    categories = {}
+    file = io.open categoryFile, "r"
+    if file
+        content = file\read "*all"
+        file\close!
+        categories = json.decode(content) or {}
+    categories
+
+saveCategories = ->
+    file = io.open categoryFile, "w"
+    if file
+        file\write json.encode categories
+        file\close!
+
+addFontToCategory = (fontName, categoryName) ->
+    if categoryName == "Uncategorized" or categoryName == "All Fonts"
+        return
+    if not categories[categoryName]
+        categories[categoryName] = {}
+    categories[categoryName][fontName] = true
+    saveCategories!
+
+removeFontFromCategory = (fontName, categoryName) ->
+    if categoryName == "Uncategorized" or categoryName == "All Fonts"
+        return
+    if categories[categoryName]
+        categories[categoryName][fontName] = nil
+        saveCategories!
+
+createNewCategory = (categoryName) ->
+    if categoryName == "Uncategorized" or categoryName == "All Fonts"
+        return false
+    if categoryName and categoryName != "" and not categories[categoryName]
+        categories[categoryName] = {}
+        saveCategories!
+        return true
+    return false
 
 updateSizeLabel = (hwnd) ->
     if sizeLabel ~= nil
@@ -296,21 +377,49 @@ populateFontList = ->
     return true
 
 updateFontList = (listBox, searchText) ->
+    selIndex = C.SendMessageA listBox, LB_GETCURSEL, 0, 0
+    topIndex = C.SendMessageA listBox, LB_GETTOPINDEX, 0, 0
+    selFont = ""
+    if selIndex >= 0
+        textLen = C.SendMessageA listBox, LB_GETTEXTLEN, selIndex, 0
+        if textLen > 0
+            buffer = ffi.new "char[?]", textLen + 1
+            if C.SendMessageA(listBox, LB_GETTEXT, selIndex, ffi.cast("uintptr_t", buffer)) ~= -1
+                selFont = ffi.string buffer
     C.SendMessageA listBox, LB_RESETCONTENT, 0, 0
     searchText = searchText\lower!
-    filteredFonts = [name for name in pairs fontFamilies when name\lower!\find(searchText, 1, true) == 1]
+    filteredFonts = {}
+    
+    if isAddingToCategory
+        filteredFonts = [name for name in pairs fontFamilies when name\lower!\find(searchText, 1, true) == 1]
+    else
+        if currentCategory == "" or currentCategory == "All Fonts"
+            filteredFonts = [name for name in pairs fontFamilies when name\lower!\find(searchText, 1, true) == 1]
+        elseif currentCategory == "Uncategorized"
+            categorizedFonts = {}
+            for catName, fonts in pairs categories
+                for fontName in pairs fonts
+                    categorizedFonts[fontName] = true
+            filteredFonts = [name for name in pairs fontFamilies when not categorizedFonts[name] and name\lower!\find(searchText, 1, true) == 1]
+        else
+            filteredFonts = [name for name in pairs categories[currentCategory] or {} when fontFamilies[name] and name\lower!\find(searchText, 1, true) == 1]
+    
     table.sort filteredFonts
     defaultFontIndex = 0
+    selFontIndex = -1
 
     for i, name in ipairs filteredFonts
         cName = ffi.new "char[?]", #name + 1, name
-        result = C.SendMessageA(listBox, LB_ADDSTRING, 0, ffi.cast("uintptr_t", cName))
-        if name\lower! == "arial" and searchText == ""
+        C.SendMessageA listBox, LB_ADDSTRING, 0, ffi.cast("uintptr_t", cName)
+        if name == selFont
+            selFontIndex = i - 1
+        if name\lower! == "arial" and searchText == "" and (currentCategory == "" or isAddingToCategory)
             defaultFontIndex = i - 1
 
     if #filteredFonts > 0
-        result = C.SendMessageA listBox, LB_SETCURSEL, defaultFontIndex, 0
-
+        newSelIndex = selFontIndex >= 0 and selFontIndex or defaultFontIndex
+        C.SendMessageA listBox, LB_SETCURSEL, newSelIndex, 0
+        C.SendMessageA listBox, LB_SETTOPINDEX, topIndex, 0
         selIndex = C.SendMessageA listBox, LB_GETCURSEL, 0, 0
         if selIndex >= 0
             textLen = C.SendMessageA listBox, LB_GETTEXTLEN, selIndex, 0
@@ -322,9 +431,33 @@ updateFontList = (listBox, searchText) ->
                     currentFont = "Arial"
             else
                 currentFont = "Arial"
+        else
+            currentFont = "Arial"
     else
         currentFont = "Arial"
     C.InvalidateRect listBox, nil, 1
+
+updateCategoryList = (categoryList) ->
+    C.SendMessageA categoryList, LB_RESETCONTENT, 0, 0
+    cAllFonts = ffi.new "char[?]", 10, "All Fonts"
+    C.SendMessageA categoryList, LB_ADDSTRING, 0, ffi.cast("uintptr_t", cAllFonts)
+    cUncategorized = ffi.new "char[?]", 13, "Uncategorized"
+    C.SendMessageA categoryList, LB_ADDSTRING, 0, ffi.cast("uintptr_t", cUncategorized)
+    categoryNames = [name for name in pairs categories]
+    table.sort categoryNames
+    for categoryName in *categoryNames
+        cName = ffi.new "char[?]", #categoryName + 1, categoryName
+        C.SendMessageA categoryList, LB_ADDSTRING, 0, ffi.cast("uintptr_t", cName)
+    selIndex = 0
+    if currentCategory ~= ""
+        combinedList = {"All Fonts", "Uncategorized"}
+        for name in *categoryNames
+            table.insert combinedList, name
+        for i, name in ipairs combinedList
+            if name == currentCategory
+                selIndex = i - 1
+                break
+    C.SendMessageA categoryList, LB_SETCURSEL, selIndex, 0
 
 getFontHeight = (fontName, fontSize) ->
     hdc = C.CreateDCA "DISPLAY", nil, nil, nil
@@ -350,7 +483,7 @@ getFontHeight = (fontName, fontSize) ->
 
 setListBoxItemHeight = (listBox, height) ->
     if C.SendMessageA(listBox, 0x01A0, 0, height) == -1
-        return -------
+        return
 
 createCheckbox = (hwndParent, hInstance, label, id, x, y) ->
     cLabel = ffi.new "char[?]", #label + 1, label
@@ -361,6 +494,11 @@ createListBox = (hwndParent, hInstance, id, x, y, width, height) ->
     styles = WS_CHILD + WS_VISIBLE + LBS_NOTIFY + LBS_HASSTRINGS + LBS_DISABLENOSCROLL
     if id == 1001
         styles = styles + LBS_OWNERDRAWFIXED + WS_VSCROLL
+    listBox = C.CreateWindowExA(0x00000004, "LISTBOX", "", styles, x, y, width, height, hwndParent, cast("void*", id), hInstance, nil)
+    return listBox
+
+createCategoryListBox = (hwndParent, hInstance, id, x, y, width, height) ->
+    styles = WS_CHILD + WS_VISIBLE + LBS_NOTIFY + LBS_HASSTRINGS + LBS_DISABLENOSCROLL + WS_VSCROLL
     listBox = C.CreateWindowExA(0x00000004, "LISTBOX", "", styles, x, y, width, height, hwndParent, cast("void*", id), hInstance, nil)
     return listBox
 
@@ -389,10 +527,8 @@ createEditBox = (hwndParent, hInstance, id, x, y, width, height, initialText) ->
     return editBox
 
 wndProc = ffi.cast "LRESULT (__stdcall *)(HWND, UINT, uintptr_t, uintptr_t)", (hwnd, msg, wParam, lParam) ->
-    if msg == 0x0010
+    if msg == WM_CLOSE
         C.DestroyWindow hwnd
-        return 0
-    elseif msg == 0x0012
         return 0
     elseif msg == WM_KEYDOWN
         if wParam == VK_ESCAPE
@@ -400,7 +536,6 @@ wndProc = ffi.cast "LRESULT (__stdcall *)(HWND, UINT, uintptr_t, uintptr_t)", (h
             return 0
         elseif wParam == VK_RETURN
             C.SendMessageA hwnd, WM_COMMAND, MAKELONG(1005, BN_CLICKED), 0
-            RESULT_TO_AEGI = 0
             return 0
     elseif msg == WM_COMMAND
         control_id = tonumber(wParam) % 65536
@@ -466,6 +601,179 @@ wndProc = ffi.cast "LRESULT (__stdcall *)(HWND, UINT, uintptr_t, uintptr_t)", (h
                 searchText = ffi.string buffer
             fontList = C.GetDlgItem hwnd, 1001
             updateFontList fontList, searchText
+            return 0
+        elseif control_id == 1009 and notification_code == LBN_SELCHANGE
+            categoryList = C.GetDlgItem hwnd, 1009
+            selIndex = C.SendMessageA categoryList, LB_GETCURSEL, 0, 0
+            if selIndex >= 0
+                textLen = C.SendMessageA categoryList, LB_GETTEXTLEN, selIndex, 0
+                if textLen > 0
+                    buffer = ffi.new "char[?]", textLen + 1
+                    if C.SendMessageA(categoryList, LB_GETTEXT, selIndex, ffi.cast("uintptr_t", buffer)) ~= -1
+                        currentCategory = ffi.string buffer
+                    else
+                        currentCategory = ""
+                else
+                    currentCategory = ""
+                if not isAddingToCategory
+                    fontList = C.GetDlgItem hwnd, 1001
+                    searchEdit = C.GetDlgItem hwnd, SEARCH_EDIT
+                    textLen = C.SendMessageA searchEdit, WM_GETTEXTLENGTH, 0, 0
+                    searchText = ""
+                    if textLen > 0
+                        buffer = ffi.new "char[?]", textLen + 1
+                        C.SendMessageA searchEdit, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                        searchText = ffi.string buffer
+                    updateFontList fontList, searchText
+            return 0
+        elseif control_id == 1013 and notification_code == BN_CLICKED
+            hInstance = C.GetModuleHandleA nil
+            editBox = createEditBox hwnd, hInstance, ADD_CATEGORY_EDIT, 10, 560, 130, 25, ""
+            C.SetFocus editBox
+            C.ShowWindow editBox, 1
+            okButton = createButton hwnd, hInstance, "OK", ADD_CATEGORY_OK, 10, 590, 60, 25
+            cancelButton = createButton hwnd, hInstance, "Cancel", ADD_CATEGORY_CANCEL, 80, 590, 60, 25
+            C.ShowWindow okButton, 1
+            C.ShowWindow cancelButton, 1
+            return 0
+        elseif control_id == ADD_CATEGORY_OK and notification_code == BN_CLICKED
+            editBox = C.GetDlgItem hwnd, ADD_CATEGORY_EDIT
+            if editBox ~= nil
+                textLen = C.SendMessageA editBox, WM_GETTEXTLENGTH, 0, 0
+                if textLen > 0
+                    buffer = ffi.new "char[?]", textLen + 1
+                    C.SendMessageA editBox, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                    newCategory = ffi.string buffer
+                    if createNewCategory newCategory
+                        categoryList = C.GetDlgItem hwnd, 1009
+                        updateCategoryList categoryList
+                    else
+                        cError = ffi.new "char[?]", 30, "Category already exists!"
+                        cTitle = ffi.new "char[?]", 15, "Error"
+                        C.MessageBoxA hwnd, cError, cTitle, MB_OK + MB_ICONERROR
+                C.DestroyWindow editBox
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_CATEGORY_OK)
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_CATEGORY_CANCEL)
+            return 0
+        elseif control_id == ADD_CATEGORY_CANCEL and notification_code == BN_CLICKED
+            editBox = C.GetDlgItem hwnd, ADD_CATEGORY_EDIT
+            if editBox ~= nil
+                C.DestroyWindow editBox
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_CATEGORY_OK)
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_CATEGORY_CANCEL)
+            return 0
+        elseif control_id == 1014 and notification_code == BN_CLICKED
+            isAddingToCategory = true
+            fontList = C.GetDlgItem hwnd, 1001
+            searchEdit = C.GetDlgItem hwnd, SEARCH_EDIT
+            textLen = C.SendMessageA searchEdit, WM_GETTEXTLENGTH, 0, 0
+            searchText = ""
+            if textLen > 0
+                buffer = ffi.new "char[?]", textLen + 1
+                C.SendMessageA searchEdit, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                searchText = ffi.string buffer
+            updateFontList fontList, searchText
+            hInstance = C.GetModuleHandleA nil
+            okButton = createButton hwnd, hInstance, "OK", ADD_TO_CATEGORY_OK, 10, 650, 60, 25
+            cancelButton = createButton hwnd, hInstance, "Cancel", ADD_TO_CATEGORY_CANCEL, 80, 650, 60, 25
+            C.ShowWindow okButton, 1
+            C.ShowWindow cancelButton, 1
+            return 0
+        elseif control_id == ADD_TO_CATEGORY_OK and notification_code == BN_CLICKED
+            if currentCategory == "" or currentCategory == "All Fonts" or currentCategory == "Uncategorized"
+                cError = ffi.new "char[?]", 30, "Select a valid category!"
+                cTitle = ffi.new "char[?]", 15, "Error"
+                C.MessageBoxA hwnd, cError, cTitle, MB_OK + MB_ICONERROR
+                isAddingToCategory = false
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_OK)
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_CANCEL)
+                fontList = C.GetDlgItem hwnd, 1001
+                searchEdit = C.GetDlgItem hwnd, SEARCH_EDIT
+                textLen = C.SendMessageA searchEdit, WM_GETTEXTLENGTH, 0, 0
+                searchText = ""
+                if textLen > 0
+                    buffer = ffi.new "char[?]", textLen + 1
+                    C.SendMessageA searchEdit, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                    searchText = ffi.string buffer
+                updateFontList fontList, searchText
+                return 0
+            fontList = C.GetDlgItem hwnd, 1001
+            selIndex = C.SendMessageA fontList, LB_GETCURSEL, 0, 0
+            if selIndex < 0
+                cError = ffi.new "char[?]", 30, "No font selected!"
+                cTitle = ffi.new "char[?]", 15, "Error"
+                C.MessageBoxA hwnd, cError, cTitle, MB_OK + MB_ICONERROR
+                isAddingToCategory = false
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_OK)
+                C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_CANCEL)
+                fontList = C.GetDlgItem hwnd, 1001
+                searchEdit = C.GetDlgItem hwnd, SEARCH_EDIT
+                textLen = C.SendMessageA searchEdit, WM_GETTEXTLENGTH, 0, 0
+                searchText = ""
+                if textLen > 0
+                    buffer = ffi.new "char[?]", textLen + 1
+                    C.SendMessageA searchEdit, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                    searchText = ffi.string buffer
+                updateFontList fontList, searchText
+                return 0
+            textLen = C.SendMessageA fontList, LB_GETTEXTLEN, selIndex, 0
+            if textLen > 0
+                buffer = ffi.new "char[?]", textLen + 1
+                if C.SendMessageA(fontList, LB_GETTEXT, selIndex, ffi.cast("uintptr_t", buffer)) ~= -1
+                    fontName = ffi.string buffer
+                    addFontToCategory fontName, currentCategory
+                    showLogMessage hwnd, "Font '#{fontName}'\nadded to '#{currentCategory}'"
+                else
+                    aegisub.log "Failed to get font name\n"
+            isAddingToCategory = false
+            C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_OK)
+            C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_CANCEL)
+            fontList = C.GetDlgItem hwnd, 1001
+            searchEdit = C.GetDlgItem hwnd, SEARCH_EDIT
+            textLen = C.SendMessageA searchEdit, WM_GETTEXTLENGTH, 0, 0
+            searchText = ""
+            if textLen > 0
+                buffer = ffi.new "char[?]", textLen + 1
+                C.SendMessageA searchEdit, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                searchText = ffi.string buffer
+            updateFontList fontList, searchText
+            return 0
+        elseif control_id == ADD_TO_CATEGORY_CANCEL and notification_code == BN_CLICKED
+            isAddingToCategory = false
+            C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_OK)
+            C.DestroyWindow C.GetDlgItem(hwnd, ADD_TO_CATEGORY_CANCEL)
+            fontList = C.GetDlgItem hwnd, 1001
+            searchEdit = C.GetDlgItem hwnd, SEARCH_EDIT
+            textLen = C.SendMessageA searchEdit, WM_GETTEXTLENGTH, 0, 0
+            searchText = ""
+            if textLen > 0
+                buffer = ffi.new "char[?]", textLen + 1
+                C.SendMessageA searchEdit, WM_GETTEXT, textLen + 1, ffi.cast("uintptr_t", buffer)
+                searchText = ffi.string buffer
+            updateFontList fontList, searchText
+            return 0
+        elseif control_id == 1015 and notification_code == BN_CLICKED
+            if currentCategory == "" or currentCategory == "All Fonts"
+                cError = ffi.new "char[?]", 30, "Select a valid category!"
+                cTitle = ffi.new "char[?]", 15, "Error"
+                C.MessageBoxA hwnd, cError, cTitle, MB_OK + MB_ICONERROR
+                aegisub.log "Error: No valid category selected for removal\n"
+                return 0
+            fontList = C.GetDlgItem hwnd, 1001
+            selIndex = C.SendMessageA fontList, LB_GETCURSEL, 0, 0
+            if selIndex < 0
+                cError = ffi.new "char[?]", 30, "No font selected!"
+                cTitle = ffi.new "char[?]", 15, "Error"
+                C.MessageBoxA hwnd, cError, cTitle, MB_OK + MB_ICONERROR
+                aegisub.log "Error: No font selected for removal\n"
+                return 0
+            textLen = C.SendMessageA fontList, LB_GETTEXTLEN, selIndex, 0
+            if textLen > 0
+                buffer = ffi.new "char[?]", textLen + 1
+                if C.SendMessageA(fontList, LB_GETTEXT, selIndex, ffi.cast("uintptr_t", buffer)) ~= -1
+                    fontName = ffi.string buffer
+                    removeFontFromCategory fontName, currentCategory
+                    updateFontList fontList, ""
             return 0
         elseif control_id == 1005 and notification_code == BN_CLICKED
             dialog_ok = true
@@ -569,10 +877,12 @@ registerClass = (hInstance) ->
 
 createWindow = ->
     dialog_ok = false
+    loadCategories!
 
     icc = ffi.new "INITCOMMONCONTROLSEX"
     icc.dwSize = ffi.sizeof "INITCOMMONCONTROLSEX"
     icc.dwICC = ICC_BAR_CLASSES
+    comctl32.InitCommonControlsEx icc
 
     hInstance = C.GetModuleHandleA nil
     if hInstance == nil
@@ -588,36 +898,42 @@ createWindow = ->
 
     unless populateFontList!
         return
-        
-    fontList = createListBox hwnd, hInstance, 1001, 10, 40, 820, 720
+
+    fontList = createListBox hwnd, hInstance, 1001, 150, 40, 680, 720
     if fontList == nil
         return
 
-    --
-    createStaticText hwnd, hInstance, "Font:", 10, 10, 130, 20
+    categoryList = createCategoryListBox hwnd, hInstance, 1009, 10, 40, 130, 480
+    createStaticText hwnd, hInstance, "Categories:", 10, 10, 130, 20
+    createStaticText hwnd, hInstance, "Font:", 150, 10, 130, 20
     createStaticText hwnd, hInstance, "Style:", 840, 10, 100, 20
-    createStaticText hwnd, hInstance, "Effect", 840, 120, 100, 20
+    createStaticText hwnd, hInstance, "Effect:", 840, 120, 100, 20
     createStaticText hwnd, hInstance, "Text Preview:", 840, 600, 100, 20
     sizeLabel = createStaticText hwnd, hInstance, "Dim: #{currentFontSize}", 840, 200, 60, 20, 1010
-    createEditBox hwnd, hInstance, SEARCH_EDIT, 150, 10, 600, 25, ""
+    createEditBox hwnd, hInstance, SEARCH_EDIT, 290, 10, 460, 25, ""
     styleList = createListBox hwnd, hInstance, 1007, 840, 30, 120, 80
-    styles = {"Regular", "Bold", "Italic", "Bold Italic"}
+    createButton hwnd, hInstance, "Add Category", 1013, 10, 530, 130, 25
+    createButton hwnd, hInstance, "Add to Category", 1014, 10, 620, 130, 25
+    createButton hwnd, hInstance, "Remove from Category", 1015, 10, 680, 130, 25
+    createCheckbox hwnd, hInstance, "Strikeout", 1003, 840, 140
+    createCheckbox hwnd, hInstance, "Underline", 1004, 840, 160
+    createEditBox hwnd, hInstance, 1011, 840, 620, 130, 20, currentText
+    createButton hwnd, hInstance, "OK", 1005, 845, 735, 60, 25
+    createButton hwnd, hInstance, "Cancel", 1006, 910, 735, 60, 25
+    createStaticText hwnd, hInstance, "", 10, 710, 130, 40, LOG_LABEL
 
+    styles = {"Regular", "Bold", "Italic", "Bold Italic"}
     for i, style in ipairs styles
         cStyle = ffi.new "char[?]", #style + 1, style
         C.SendMessageA styleList, LB_ADDSTRING, 0, ffi.cast("uintptr_t", cStyle)
     C.SendMessageA styleList, LB_SETCURSEL, 0, 0
     sizeTrackbar = createTrackbar hwnd, hInstance, 1008, 840, 220, 100, 20
 
-    createCheckbox hwnd, hInstance, "Strikeout", 1003, 840, 140
-    createCheckbox hwnd, hInstance, "Underline", 1004, 840, 160
-    createEditBox hwnd, hInstance, 1011, 840, 620, 200, 20, currentText
-    createButton hwnd, hInstance, "OK", 1005, 845, 735, 60, 25
-    createButton hwnd, hInstance, "Cancel", 1006, 910, 735, 60, 25
     arialHeight = getFontHeight "Arial", 16
     previewHeight = getFontHeight "Arial", currentFontSize
     itemHeight = arialHeight + previewHeight + 15
     setListBoxItemHeight fontList, itemHeight
+    updateCategoryList categoryList
     updateFontList fontList, ""
 
     C.ShowWindow hwnd, 1
@@ -626,11 +942,12 @@ createWindow = ->
     while C.GetMessageA(msg, hwnd, 0, 0) > 0
         C.TranslateMessage msg
         C.DispatchMessageA msg
+        updateLogMessage hwnd
         if msg.message == 0x0010 or msg.message == 0x0012
             break
     C.DestroyWindow hwnd
     if C.UnregisterClassA(className, hInstance) == 0
-        aegisub.log "Error: #{ffi.errno!}\n"
+        aegisub.log "Error unregistering class: #{ffi.errno!}\n"
 
     if dialog_ok
         return true, {
@@ -650,8 +967,8 @@ FontManager = (sub, sel, activeLine) ->
         return
 
     for l, s, i, n in ass\iterSel!
-		ass\progressLine s, i, n
-		Line.extend ass, l
+        ass\progressLine s, i, n
+        Line.extend ass, l
         ass\removeLine l, s
         
         l.tags\insert {{"fn", fontData.font}}
@@ -662,6 +979,6 @@ FontManager = (sub, sel, activeLine) ->
         l.tags\insert {{"s",  fontData.strikethrough}}
         ass\insertLine l, s
 
-	return ass\getNewSelection!
+    return ass\getNewSelection!
 
 aegisub.register_macro ": Font Manager :", "", FontManager
